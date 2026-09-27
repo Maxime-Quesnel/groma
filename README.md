@@ -20,3 +20,52 @@ AI agents skip that step. People install an agent on a VPS, give it a shell, the
 - **what gets in**: skills, plugins, hooks and MCP servers, checked before you trust them;
 - **what gets out**: ports, dashboards and tunnels your agent exposes to the world;
 - **what it can touch**: files, secrets and commands within its reach.
+
+## Install
+
+groma is a single binary with no runtime dependency, for macOS and Linux. No release is published yet, so install it from source with [Go](https://go.dev/dl/) 1.27 or later:
+
+```sh
+go install github.com/Maxime-Quesnel/groma/cmd/groma@latest
+```
+
+The binary lands in `$(go env GOPATH)/bin`, usually `~/go/bin`. Add that directory to your `PATH` if it isn't there yet:
+
+```sh
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
+Or build it from a clone:
+
+```sh
+git clone https://github.com/Maxime-Quesnel/groma.git
+cd groma
+go build -o groma ./cmd/groma
+```
+
+## Usage
+
+Check everything Claude Code loads on your machine: your settings, skills, agents and hooks, every installed plugin, and the `.claude` directory of the project you run it from:
+
+```sh
+groma scan
+```
+
+Check one plugin, marketplace or skill directory, for instance before publishing or installing it:
+
+```sh
+groma scan ./my-plugin
+```
+
+groma exits with 0 when it finds nothing, 1 when it has findings and 2 on error, so a CI job can fail on findings. It only reads: it never modifies a file, never runs the code it inspects, and sends nothing over the network.
+
+## What it checks
+
+| Rule | Severity | Flags |
+|---|---|---|
+| `scan.hidden-unicode` | high | Text a reviewer can't see: Unicode tag characters and variation selectors hiding a message, bidirectional controls, zero-width characters |
+| `scan.hook-runs-remote-code` | high | A hook, or the inline shell of a skill or command, that downloads code and runs it, directly or through a script it calls |
+| `scan.reads-credentials` | high | Plugin code or a hook that reaches for SSH keys, cloud credentials, registry tokens, the keychain, browser logins or Claude's credentials |
+| `scan.preapproves-any-command` | medium | A skill or command whose `allowed-tools` lets Claude run any shell command without asking |
+
+Each finding names the file and the line or command behind it; common secret shapes in evidence, such as tokens and passwords in URLs, are masked. groma is a safety net, not a guarantee: every rule documents its known false positives, and a clean report means no known pattern was found, not that a plugin is safe.
