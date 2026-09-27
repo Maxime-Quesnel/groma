@@ -14,9 +14,9 @@ The real attack surface is the combination of three things: what the agent is al
 
 ## Who it's for
 
-- **Individual developers and power users** who self-host an agent on a VPS, a homelab or their own laptop.
-- **Small teams** sharing an agent on a server, without a security team.
-- **Authors of skills and plugins** who want to check their work before publishing it.
+- **Authors of Claude Code plugins** who want to check their skills, agents, hooks and MCP servers before publishing them, on their machine and in CI. This is the first audience.
+- **People installing plugins** from a marketplace or a GitHub link, who want to know what they are about to trust.
+- **Individual developers and small teams** who self-host an always-on agent on a VPS, a homelab or their own laptop.
 
 Not a first target: enterprises that need fleet management, compliance reports or SOC integration.
 
@@ -28,13 +28,27 @@ Agent platforms are adding their own protections: permission systems, sandboxes,
 - **They look at the agent, not the deployment.** An agent can't tell that its dashboard is bound to a public interface, that the tunnel in front of it has no authentication, or that it runs as root next to the Docker socket. `groma expose` can.
 - **groma is neutral.** It has no marketplace to protect and no agent to promote. Its rules are public, reviewed in the open, and give everyone the same findings.
 
+### Next to `claude plugin eval`
+
+`claude plugin eval` runs a plugin against test cases in a sandboxed session and grades its behaviour: did the skill trigger, call the right tools, produce the right file. It answers "does the plugin do its job?". It doesn't read the plugin's files, doesn't look for secrets or dangerous patterns, and doesn't inspect hooks or MCP servers, which run outside its sandbox. Nor does it question the tools a skill pre-approves.
+
+groma is the static counterpart. It reads everything the plugin ships and runs none of it, and answers "what else could this plugin do?". A plugin author runs both in CI.
+
 groma is not a sandbox and not a runtime monitor: it inspects a state, it doesn't watch execution. It is not an antivirus with signatures pulled from a cloud. And it is not a guarantee.
 
 ## The three commands
 
 ### `groma scan`: what gets in
 
-Inspects the extensions installed for each agent, through that agent's adapter: skills, plugins, hooks and MCP server definitions. It looks for:
+Inspects a plugin, a marketplace or a skill directory, or everything installed for an agent. For Claude Code that means every place where a plugin can run code or gain permissions without a per-action approval:
+
+- hooks (`hooks/hooks.json`, `plugin.json`, skill and agent frontmatter) and the scripts they call, some of which run on every session start or tool call;
+- MCP and LSP servers (`.mcp.json`, `.lsp.json`), which start when the plugin is enabled and run as the user;
+- executables in `bin/`, added to `PATH`;
+- skills, agents and commands: their instructions, the tools they pre-approve (`allowed-tools`, `tools`, `permissionMode`) and the shell commands they inline;
+- the manifests (`plugin.json`, `marketplace.json`) and every script the plugin ships.
+
+It looks for:
 
 - hidden instructions and prompt injection aimed at the agent;
 - invisible or deceptive Unicode: zero-width characters, tag characters, bidirectional overrides;
@@ -73,18 +87,19 @@ Proposes safe settings for the findings of `scan` and `expose`: bind to localhos
 
 ## Roadmap
 
-**v1**
+**v1: `groma scan` for Claude Code plugins**
 
-1. `groma expose` for one agent on a Linux VPS. OpenClaw is the default target, as the agent most often exposed on a server.
-2. `groma scan` for Claude Code skills.
+1. A plugin, marketplace or skill directory given as a path, with exit codes a CI job can use.
+2. Everything installed: `~/.claude/plugins`, user and project skills, agents and hooks.
+3. Machine-readable output (JSON, then SARIF for GitHub code scanning).
 
 **Next**
 
-3. `groma fix` for the findings of the first two commands.
-4. More adapters: OpenClaw and Hermes Agent for `scan`, Claude Code and Hermes Agent for `expose`.
-5. Codex CLI and OpenCode.
+4. `groma expose` for always-on agents on a Linux VPS, starting with OpenClaw.
+5. `groma fix` for the findings of both commands.
+6. More adapters: skills of OpenClaw and Hermes Agent for `scan`, Hermes Agent for `expose`, then Codex CLI and OpenCode.
 
-**Ideas, not commitments:** host checks on macOS, a CI mode for skill authors, machine-readable output (JSON, SARIF).
+**Ideas, not commitments:** host checks on macOS.
 
 **Not planned:** a web UI, a hosted service, Windows support, fixes applied without confirmation.
 

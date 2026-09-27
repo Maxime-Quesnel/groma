@@ -54,11 +54,9 @@ The first rule defines the Go shape of this metadata in `internal/rule/`. Later 
 
 ## 6. Write the tests
 
-A table-driven test in `<snake_case_risk>_test.go`:
+`TestRules` runs every registered rule against its fixtures on its own: each file in `dangerous/` must yield evidence, each file in `safe/` none. The fixture folder is the rule ID without its command prefix.
 
-- each file in `dangerous/` yields at least one finding with the rule's ID and severity;
-- each file in `safe/` yields none;
-- if the rule can see a secret, the finding carries the masked form and never the clear value.
+`<snake_case_risk>_test.go` only asserts what the evidence says: exact wording, decoded content, and, if the rule can see a secret, the masked form and never the clear value.
 
 Then run:
 
@@ -78,4 +76,4 @@ go vet ./...
 - [ ] No agent path is hardcoded: everything goes through the adapter.
 - [ ] Dangerous and safe fixtures exist, and the tests pass.
 - [ ] False positives are documented.
-- [ ] The rule is registered, so `groma scan` or `groma expose` runs it.
+- [ ] The rule is added to `Rules` in its command's package, so `groma scan` or `groma expose` runs it.

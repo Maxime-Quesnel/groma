@@ -29,8 +29,9 @@ Problem, audience, positioning and roadmap: [docs/VISION.md](docs/VISION.md).
 
 ## v1 scope
 
-1. `groma expose` for a single agent on a Linux VPS.
-2. `groma scan` for Claude Code skills.
+`groma scan` for Claude Code plugins: first a plugin, marketplace or skill directory given as a path, then everything installed on the machine. The main user is a plugin author checking their work before publishing it, locally or in CI. `claude plugin eval` checks that a plugin does its job; groma checks what else it could do.
+
+`groma expose` comes after v1. Its first slice, for OpenClaw on a Linux VPS, waits in draft PR #1.
 
 Non-goals for v1: web UI, hosted service, Windows, automatic fixes without confirmation.
 
@@ -51,14 +52,13 @@ Non-goals for v1: web UI, hosted service, Windows, automatic fixes without confi
 - **Tests:** `go test ./...`, table-driven, fixtures in each package's `testdata/`. Tests never open a socket or run `ssh`: `expose` rules are tested against captured command output.
 - **Before a change is done:** `gofmt -l .` prints nothing and `go vet ./...` passes.
 
-Planned layout, to confirm with the first code:
+Layout:
 
 ```
 cmd/groma/               CLI entry point
-internal/rule/           Rule type, Finding, Severity
-internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule>/
-internal/rules/expose/   one file per expose rule, same shape
-internal/agent/<name>/   one adapter per agent: claudecode, openclaw, hermes...
-internal/host/           local and SSH command execution, read-only
+internal/rule/           rule metadata, Finding, Severity
+internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule>/; Collect and the Rules registry
 internal/report/         rendering and secret masking
 ```
+
+`expose` adds `internal/rules/expose/`, `internal/agent/` (neutral agent descriptions and one adapter per agent) and `internal/host/` (read-only probes, local or over SSH).
