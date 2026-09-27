@@ -2,7 +2,6 @@ package scan
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/Maxime-Quesnel/groma/internal/plugin"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
@@ -26,24 +25,14 @@ var hookRunsRemoteCode = Rule{
 	},
 	Check: func(p plugin.Plugin) []Hit {
 		var hits []Hit
-		add := func(source, evidence string) {
-			i := slices.IndexFunc(hits, func(h Hit) bool { return h.Subject == source })
-			if i < 0 {
-				hits = append(hits, Hit{Subject: source})
-				i = len(hits) - 1
-			}
-			if !slices.Contains(hits[i].Evidence, evidence) {
-				hits[i].Evidence = append(hits[i].Evidence, evidence)
-			}
-		}
 		for _, h := range p.Hooks {
 			for _, c := range findRemoteCode([]byte(h.Command)) {
-				add(h.Source, fmt.Sprintf("%s hook runs %s", h.Event, clip(c.text)))
+				hits = addHit(hits, h.Source, fmt.Sprintf("%s hook runs %s", h.Event, clip(c.text)))
 			}
 			for _, script := range h.Scripts {
 				f, _ := p.File(script)
 				for _, c := range findRemoteCode(f.Content) {
-					add(h.Source, fmt.Sprintf("%s hook runs %s, which at line %d runs %s", h.Event, script, c.line, clip(c.text)))
+					hits = addHit(hits, h.Source, fmt.Sprintf("%s hook runs %s, which at line %d runs %s", h.Event, script, c.line, clip(c.text)))
 				}
 			}
 		}
