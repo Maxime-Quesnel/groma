@@ -31,7 +31,7 @@ Problem, audience, positioning and roadmap: [docs/VISION.md](docs/VISION.md).
 
 `groma scan` for Claude Code plugins: first a plugin, marketplace or skill directory given as a path, then everything installed on the machine. The main user is a plugin author checking their work before publishing it, locally or in CI. `claude plugin eval` checks that a plugin does its job; groma checks what else it could do.
 
-`groma expose` comes after v1. Its first slice, for OpenClaw on a Linux VPS, waits in draft PR #1.
+`groma expose` comes after v1. A first slice, for OpenClaw on a Linux VPS, is kept on the branch `expose-agent-port-public` and is not merged.
 
 Non-goals for v1: web UI, hosted service, Windows, automatic fixes without confirmation.
 

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -84,6 +85,27 @@ func Read(root string) (Plugin, error) {
 		return nil
 	})
 	return p, err
+}
+
+// ReadAs reads root like Read but names its files under display, so that
+// several roots read into one plugin keep distinct paths.
+func ReadAs(root, display string) (Plugin, error) {
+	p, err := Read(root)
+	if err != nil {
+		return p, err
+	}
+	info, err := os.Stat(root)
+	if err != nil {
+		return p, err
+	}
+	for i := range p.Files {
+		if info.IsDir() {
+			p.Files[i].Path = path.Join(display, p.Files[i].Path)
+		} else {
+			p.Files[i].Path = display
+		}
+	}
+	return p, nil
 }
 
 func binary(content []byte) bool {
