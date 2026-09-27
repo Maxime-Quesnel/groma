@@ -49,3 +49,31 @@ func TestTextWithoutFindings(t *testing.T) {
 		t.Errorf("got %q", out.String())
 	}
 }
+
+func TestTextEscapesUntrustedText(t *testing.T) {
+	var out strings.Builder
+
+	Text(&out, []rule.Finding{{
+		Rule:     rule.Meta{ID: "scan.x", Severity: rule.Low},
+		Subject:  "skills/x\x1b[2J/SKILL.md",
+		Evidence: []string{"a\u200Bb", "café 🏴"},
+	}})
+
+	if s := out.String(); strings.ContainsAny(s, "\x1b\u200B") ||
+		!strings.Contains(s, `skills/x\x1b[2J/SKILL.md`) || !strings.Contains(s, `a\u200bb`) || !strings.Contains(s, "café 🏴") {
+		t.Errorf("got %q", s)
+	}
+}
+
+func TestTextCapsEvidence(t *testing.T) {
+	var out strings.Builder
+
+	Text(&out, []rule.Finding{{
+		Rule:     rule.Meta{ID: "scan.x", Severity: rule.Low},
+		Evidence: strings.Split("1 2 3 4 5 6 7 8", " "),
+	}})
+
+	if s := out.String(); !strings.Contains(s, "- 5\n") || strings.Contains(s, "- 6\n") || !strings.Contains(s, "- and 3 more\n") {
+		t.Errorf("got %q", s)
+	}
+}

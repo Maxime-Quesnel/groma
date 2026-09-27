@@ -57,7 +57,7 @@ Layout:
 ```
 cmd/groma/               CLI entry point
 internal/rule/           rule metadata, Finding, Severity
-internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule>/; Facts and Collect
+internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule>/; Collect and the Rules registry
 internal/report/         rendering and secret masking
 ```
 
