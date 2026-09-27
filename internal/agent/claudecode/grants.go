@@ -13,10 +13,7 @@ import (
 func Grants(p plugin.Plugin) []plugin.Grant {
 	var grants []plugin.Grant
 	for _, f := range p.Files {
-		dir, base := path.Split(f.Path)
-		skill := base == "SKILL.md"
-		command := strings.HasSuffix(base, ".md") && (strings.HasPrefix(dir, "commands/") || strings.Contains(dir, "/commands/"))
-		if !skill && !command {
+		if !skillOrCommand(f.Path) {
 			continue
 		}
 		for _, tool := range frontmatterList(f.Content, "allowed-tools") {
@@ -24,6 +21,11 @@ func Grants(p plugin.Plugin) []plugin.Grant {
 		}
 	}
 	return grants
+}
+
+func skillOrCommand(file string) bool {
+	dir, base := path.Split(file)
+	return base == "SKILL.md" || strings.HasSuffix(base, ".md") && (strings.HasPrefix(dir, "commands/") || strings.Contains(dir, "/commands/"))
 }
 
 // frontmatterList reads a list field from a Markdown file's YAML header, in

@@ -23,7 +23,9 @@ type File struct {
 
 // A Hook runs a command on an agent event, without asking the user.
 type Hook struct {
-	Event   string
+	// Trigger says what runs the command, as the report shows it:
+	// "SessionStart hook", "inline shell".
+	Trigger string
 	Command string
 	// Source is the file that declares the hook.
 	Source string

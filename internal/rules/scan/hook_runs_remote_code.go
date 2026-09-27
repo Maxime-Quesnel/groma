@@ -12,7 +12,7 @@ var hookRunsRemoteCode = Rule{
 		ID:       "scan.hook-runs-remote-code",
 		Severity: rule.High,
 		Title:    "Hook downloads and runs remote code",
-		Description: "Hooks run on their own, at session start or around every tool call, without asking the user. " +
+		Description: "Hooks run on their own, at session start or around every tool call, and so does the inline shell of skills and commands, before Claude reads them; none of it asks the user. " +
 			"This one downloads code and executes it, so whoever controls the URL runs commands on the user's machine with their permissions, " +
 			"and can change what runs at any time after the plugin was reviewed.",
 		Remediation: "Ship the code inside the plugin, or pin the download to a checksum and verify it before running it. Never pipe a download into a shell.",
@@ -20,6 +20,7 @@ var hookRunsRemoteCode = Rule{
 			"A download verified by a tool groma doesn't know, rather than sha256sum, shasum, gpg, cosign or minisign.",
 			"A URL that points at a local service rather than the internet.",
 			"A matching line in a heredoc or a string the script never runs. Comment lines starting with # or // are skipped.",
+			"An inline shell example inside a regular code block of a skill: the Claude Code docs don't say whether it runs there, so groma assumes it does.",
 		},
 		References: []string{"https://code.claude.com/docs/en/hooks"},
 	},
@@ -27,12 +28,12 @@ var hookRunsRemoteCode = Rule{
 		var hits []Hit
 		for _, h := range p.Hooks {
 			for _, c := range findRemoteCode([]byte(h.Command)) {
-				hits = addHit(hits, h.Source, fmt.Sprintf("%s hook runs %s", h.Event, clip(c.text)))
+				hits = addHit(hits, h.Source, fmt.Sprintf("%s runs %s", h.Trigger, clip(c.text)))
 			}
 			for _, script := range h.Scripts {
 				f, _ := p.File(script)
 				for _, c := range findRemoteCode(f.Content) {
-					hits = addHit(hits, h.Source, fmt.Sprintf("%s hook runs %s, which at line %d runs %s", h.Event, script, c.line, clip(c.text)))
+					hits = addHit(hits, h.Source, fmt.Sprintf("%s runs %s, which at line %d runs %s", h.Trigger, script, c.line, clip(c.text)))
 				}
 			}
 		}
