@@ -1,0 +1,1 @@
+LISTEN 0      511                *:28789            *:*    users:(("openclaw-gatewa",pid=2204,fd=21))

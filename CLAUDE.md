@@ -51,14 +51,15 @@ Non-goals for v1: web UI, hosted service, Windows, automatic fixes without confi
 - **Tests:** `go test ./...`, table-driven, fixtures in each package's `testdata/`. Tests never open a socket or run `ssh`: `expose` rules are tested against captured command output.
 - **Before a change is done:** `gofmt -l .` prints nothing and `go vet ./...` passes.
 
-Planned layout, to confirm with the first code:
+Layout (`scan` packages come with the first scan rule):
 
 ```
 cmd/groma/               CLI entry point
-internal/rule/           Rule type, Finding, Severity
+internal/rule/           rule metadata, Finding, Severity
 internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule>/
-internal/rules/expose/   one file per expose rule, same shape
-internal/agent/<name>/   one adapter per agent: claudecode, openclaw, hermes...
-internal/host/           local and SSH command execution, read-only
+internal/rules/expose/   one file per expose rule, same shape; Facts and Collect
+internal/agent/          the neutral Agent description rules rely on
+internal/agent/<name>/   one adapter per agent: openclaw, claudecode, hermes...
+internal/host/           read-only probes, run locally or over SSH
 internal/report/         rendering and secret masking
 ```
