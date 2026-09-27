@@ -25,6 +25,7 @@ var readsCredentials = Rule{
 			"A deny list of sensitive paths inside a guard hook that blocks access to them.",
 			"A matching path in a string or docstring the code never uses. Comment lines are skipped.",
 			"A project .npmrc or .pypirc that holds registry settings rather than tokens.",
+			"An inline shell example inside a regular code block of a skill: the Claude Code docs don't say whether it runs there, so groma assumes it does.",
 		},
 	},
 	Check: func(p plugin.Plugin) []Hit {
@@ -39,7 +40,7 @@ var readsCredentials = Rule{
 		}
 		for _, h := range p.Hooks {
 			for _, c := range findCredentials([]byte(h.Command)) {
-				hits = addHit(hits, h.Source, fmt.Sprintf("%s hook reaches %s: %s", h.Event, c.text, clip(c.code)))
+				hits = addHit(hits, h.Source, fmt.Sprintf("%s reaches %s: %s", h.Trigger, c.text, clip(c.code)))
 			}
 		}
 		return hits
