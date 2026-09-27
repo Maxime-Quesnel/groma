@@ -1,16 +1,17 @@
 package scan
 
 import (
-	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
-	"testing/fstest"
+
+	"github.com/Maxime-Quesnel/groma/internal/agent/claudecode"
+	"github.com/Maxime-Quesnel/groma/internal/plugin"
 )
 
 // Every registered rule must be documented and have dangerous and safe
-// fixtures in testdata/<ID without "scan.">.
+// fixtures in testdata/<ID without "scan.">. A fixture is a file or a whole
+// plugin directory.
 func TestRules(t *testing.T) {
 	seen := map[string]bool{}
 	for _, r := range Rules {
@@ -35,11 +36,11 @@ func checkFixtures(t *testing.T, r Rule, dir string) {
 		}
 		for _, path := range paths {
 			t.Run(kind+"/"+filepath.Base(path), func(t *testing.T) {
-				evidence := r.Check(mustCollect(t, path)[0])
-				if kind == "safe" && len(evidence) > 0 {
-					t.Errorf("safe fixture flagged: %q", evidence)
+				hits := r.Check(load(t, path))
+				if kind == "safe" && len(hits) > 0 {
+					t.Errorf("safe fixture flagged: %+v", hits)
 				}
-				if kind == "dangerous" && len(evidence) == 0 {
+				if kind == "dangerous" && len(hits) == 0 {
 					t.Error("dangerous fixture not flagged")
 				}
 			})
@@ -47,53 +48,12 @@ func checkFixtures(t *testing.T, r Rule, dir string) {
 	}
 }
 
-func mustCollect(t *testing.T, path string) []File {
+func load(t *testing.T, path string) plugin.Plugin {
 	t.Helper()
-	files, err := Collect(path)
-	if err != nil || len(files) == 0 {
-		t.Fatalf("Collect(%s) = %d files, %v", path, len(files), err)
+	p, err := plugin.Read(path)
+	if err != nil || len(p.Files) == 0 {
+		t.Fatalf("plugin.Read(%s) = %d files, %v", path, len(p.Files), err)
 	}
-	return files
-}
-
-func TestCollectSkipsGitBinariesAndSymlinks(t *testing.T) {
-	root := t.TempDir()
-	err := os.CopyFS(root, fstest.MapFS{
-		"skills/format/SKILL.md": {Data: []byte("Format the file.")},
-		".git/config":            {Data: []byte("[core]")},
-		"bin/tool":               {Data: []byte("\x7fELF\x00\x00")},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	outside := filepath.Join(t.TempDir(), "id_ed25519")
-	if err := os.WriteFile(outside, []byte("not a real key"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(outside, filepath.Join(root, "skills", "format", "key")); err != nil {
-		t.Fatal(err)
-	}
-
-	var paths []string
-	for _, f := range mustCollect(t, root) {
-		paths = append(paths, f.Path)
-	}
-	if want := []string{"skills/format/SKILL.md"}; !slices.Equal(paths, want) {
-		t.Errorf("collected %v, want %v", paths, want)
-	}
-}
-
-func TestCollectFollowsASymlinkedRoot(t *testing.T) {
-	plugin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(plugin, "SKILL.md"), []byte("Format the file."), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(t.TempDir(), "plugin")
-	if err := os.Symlink(plugin, link); err != nil {
-		t.Fatal(err)
-	}
-
-	if files := mustCollect(t, link); files[0].Path != "SKILL.md" {
-		t.Errorf("collected %v", files)
-	}
+	p.Hooks = claudecode.Hooks(p)
+	return p
 }

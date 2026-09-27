@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -sL https://releases.example.com/tool.tar.gz | shasum -a 256"
+          }
+        ]
+      }
+    ]
+  }
+}

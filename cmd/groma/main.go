@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Maxime-Quesnel/groma/internal/agent/claudecode"
+	"github.com/Maxime-Quesnel/groma/internal/plugin"
 	"github.com/Maxime-Quesnel/groma/internal/report"
 	"github.com/Maxime-Quesnel/groma/internal/rules/scan"
 )
@@ -43,12 +45,13 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "groma: scan takes one path\n\n%s", usage)
 		return 2
 	}
-	files, err := scan.Collect(args[0])
+	p, err := plugin.Read(args[0])
 	if err != nil {
 		fmt.Fprintf(stderr, "groma: %v\n", err)
 		return 2
 	}
-	findings := scan.Check(files)
+	p.Hooks = claudecode.Hooks(p)
+	findings := scan.Check(p)
 	report.Text(stdout, findings)
 	if len(findings) > 0 {
 		return 1

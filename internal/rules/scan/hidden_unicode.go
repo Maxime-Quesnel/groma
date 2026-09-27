@@ -6,6 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Maxime-Quesnel/groma/internal/plugin"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -29,9 +30,9 @@ var hiddenUnicode = Rule{
 			"https://trojansource.codes/",
 		},
 	},
-	Check: func(f File) []string {
+	Check: eachFile(func(f plugin.File) []string {
 		return findHidden(string(f.Content))
-	},
+	}),
 }
 
 const (
