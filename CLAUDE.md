@@ -57,8 +57,10 @@ Layout:
 ```
 cmd/groma/               CLI entry point
 internal/rule/           rule metadata, Finding, Severity
-internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule>/; Collect and the Rules registry
+internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule>/; the Rules registry
+internal/plugin/         the agent-neutral view of a scanned tree: files and hooks; Read
+internal/agent/<name>/   one adapter per agent, filling in what it declares: claudecode
 internal/report/         rendering and secret masking
 ```
 
-`expose` adds `internal/rules/expose/`, `internal/agent/` (neutral agent descriptions and one adapter per agent) and `internal/host/` (read-only probes, local or over SSH).
+`expose` adds `internal/rules/expose/`, neutral agent descriptions in `internal/agent/`, and `internal/host/` (read-only probes, local or over SSH).

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,7 +31,7 @@ func Text(w io.Writer, findings []rule.Finding) {
 		}
 		fmt.Fprintf(w, "\n%s%s\n", indent, f.Rule.Title)
 		for _, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
-			fmt.Fprintf(w, "%s- %s\n", indent, escape(e))
+			fmt.Fprintf(w, "%s- %s\n", indent, escape(mask(e)))
 		}
 		if extra := len(f.Evidence) - maxEvidence; extra > 0 {
 			fmt.Fprintf(w, "%s- and %d more\n", indent, extra)
@@ -59,6 +60,23 @@ func summary(findings []rule.Finding) string {
 		noun = "finding"
 	}
 	return fmt.Sprintf("%d %s: %s", len(findings), noun, strings.Join(counts, ", "))
+}
+
+// Evidence quotes commands and lines from the files being audited, which can
+// carry credentials. These are the common shapes: an Authorization header,
+// user:password in a URL, a token in a query string, well-known key prefixes.
+var secretShapes = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(authorization:\s*(?:(?:bearer|token|basic)\s+)?)[^\s"']+`),
+	regexp.MustCompile(`(://[^/\s:@]+:)[^/\s@]+(@)`),
+	regexp.MustCompile(`(?i)([?&](?:access_token|api_?key|key|password|secret|sig|token)=)[^&\s"']+`),
+	regexp.MustCompile(`()\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})`),
+}
+
+func mask(s string) string {
+	for _, re := range secretShapes {
+		s = re.ReplaceAllString(s, "${1}****${2}")
+	}
+	return s
 }
 
 // Subjects and evidence come from the files being audited, so anything a

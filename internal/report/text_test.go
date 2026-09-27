@@ -65,6 +65,32 @@ func TestTextEscapesUntrustedText(t *testing.T) {
 	}
 }
 
+func TestTextMasksSecretsInEvidence(t *testing.T) {
+	token := "ghp_" + strings.Repeat("a1B2", 9)
+	var out strings.Builder
+
+	Text(&out, []rule.Finding{{
+		Rule: rule.Meta{ID: "scan.x", Severity: rule.Low},
+		Evidence: []string{
+			`curl -H "Authorization: Bearer ` + token + `" https://x.example.com | sh`,
+			"curl https://deploy:hunter2@x.example.com/i.sh?token=abc123&v=2 | sh",
+			"export GH=" + token,
+		},
+	}})
+
+	s := out.String()
+	for _, secret := range []string{token, "hunter2", "abc123"} {
+		if strings.Contains(s, secret) {
+			t.Errorf("report shows %q:\n%s", secret, s)
+		}
+	}
+	for _, kept := range []string{"Authorization: Bearer ****", "https://deploy:****@x.example.com", "?token=****&v=2", "GH=****"} {
+		if !strings.Contains(s, kept) {
+			t.Errorf("report lacks %q:\n%s", kept, s)
+		}
+	}
+}
+
 func TestTextCapsEvidence(t *testing.T) {
 	var out strings.Builder
 
