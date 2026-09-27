@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gcloud/**)",
+      "Read(~/.kube/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.netrc)",
+      "Read(/.env)",
+      "Read(/.env.*)",
+      "Bash(rm *)",
+      "Bash(sudo *)",
+      "Bash(git push *--force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * -f*)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)"
+    ],
+    "ask": [
+      "Bash(git push *)"
+    ]
+  }
+}
