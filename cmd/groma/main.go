@@ -51,6 +51,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	p.Hooks = claudecode.Hooks(p)
+	p.Grants = claudecode.Grants(p)
 	findings := scan.Check(p)
 	report.Text(stdout, findings)
 	if len(findings) > 0 {
