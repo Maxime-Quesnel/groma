@@ -2,8 +2,10 @@
 package claudecode
 
 import (
+	"cmp"
 	"encoding/json"
 	"maps"
+	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -115,7 +117,7 @@ func above(file string, names ...string) (string, bool) {
 	parts := strings.Split(file, "/")
 	for i := len(parts) - 2; i >= 0; i-- {
 		if slices.Contains(names, parts[i]) {
-			return path.Join(append([]string{"."}, parts[:i]...)...), true
+			return cmp.Or(strings.Join(parts[:i], "/"), "."), true
 		}
 	}
 	return "", false
@@ -163,15 +165,28 @@ func manifestHooks(content []byte) (files []string, inline []events) {
 // ${CLAUDE_PROJECT_DIR} or ${CLAUDE_SKILL_DIR}, often quoted apart from the
 // rest of the path, as in "${CLAUDE_PLUGIN_ROOT}"/scripts/x.sh. roots maps
 // each variable, without its CLAUDE_ prefix, to a directory of the scan.
-var scriptPath = regexp.MustCompile(`\$\{?CLAUDE_(PLUGIN_ROOT|PROJECT_DIR|SKILL_DIR)\}?(/[^\s;&|)]+)`)
+// User hooks tend to name their scripts by absolute path, ~ or $HOME instead.
+var scriptPath = regexp.MustCompile(`\$\{?CLAUDE_(PLUGIN_ROOT|PROJECT_DIR|SKILL_DIR)\}?(/[^\s;&|)]+)|(?:^|[\s=])(~|\$\{?HOME\}?)?(/[^\s;&|)]+)`)
 
 func scripts(p plugin.Plugin, command string, roots map[string]string) []string {
 	var found []string
 	unquoted := strings.NewReplacer(`"`, "", `'`, "").Replace(command)
+	home, _ := os.UserHomeDir()
 	for _, m := range scriptPath.FindAllStringSubmatch(unquoted, -1) {
-		root, known := roots[m[1]]
-		file := path.Join(root, m[2])
-		if _, ok := p.File(file); known && ok {
+		var file string
+		switch {
+		case m[1] != "":
+			root, known := roots[m[1]]
+			if !known {
+				continue
+			}
+			file = path.Join(root, m[2])
+		case m[3] != "":
+			file = path.Join(home, m[4])
+		default:
+			file = m[4]
+		}
+		if _, ok := p.File(file); ok && !slices.Contains(found, file) {
 			found = append(found, file)
 		}
 	}

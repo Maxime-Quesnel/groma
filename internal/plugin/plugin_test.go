@@ -58,3 +58,28 @@ func TestReadFollowsASymlinkedRoot(t *testing.T) {
 		t.Error("SKILL.md not read through the symlinked root")
 	}
 }
+
+func TestReadAsNamesFilesUnderDisplay(t *testing.T) {
+	root := t.TempDir()
+	if err := os.CopyFS(root, fstest.MapFS{"skills/a/SKILL.md": {Data: []byte("a")}, "settings.json": {Data: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+
+	dir, err := ReadAs(root, "/home/me/.claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := ReadAs(filepath.Join(root, "settings.json"), "/home/me/.claude/settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var paths []string
+	for _, f := range append(dir.Files, file.Files...) {
+		paths = append(paths, f.Path)
+	}
+	want := []string{"/home/me/.claude/settings.json", "/home/me/.claude/skills/a/SKILL.md", "/home/me/.claude/settings.json"}
+	if !slices.Equal(paths, want) {
+		t.Errorf("got %v, want %v", paths, want)
+	}
+}
