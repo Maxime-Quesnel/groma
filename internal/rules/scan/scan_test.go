@@ -55,5 +55,6 @@ func load(t *testing.T, path string) plugin.Plugin {
 		t.Fatalf("plugin.Read(%s) = %d files, %v", path, len(p.Files), err)
 	}
 	p.Hooks = claudecode.Hooks(p)
+	p.Grants = claudecode.Grants(p)
 	return p
 }

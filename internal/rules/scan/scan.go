@@ -18,6 +18,7 @@ type Hit struct {
 var Rules = []Rule{
 	hiddenUnicode,
 	hookRunsRemoteCode,
+	preapprovesAnyCommand,
 }
 
 func Check(p plugin.Plugin) []rule.Finding {

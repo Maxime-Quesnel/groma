@@ -10,8 +10,9 @@ import (
 )
 
 type Plugin struct {
-	Files []File
-	Hooks []Hook
+	Files  []File
+	Hooks  []Hook
+	Grants []Grant
 }
 
 type File struct {
@@ -28,6 +29,14 @@ type Hook struct {
 	Source string
 	// Scripts are the files of the scanned tree that the command runs.
 	Scripts []string
+}
+
+// A Grant lets the agent use a tool without asking the user, such as a
+// permission rule like Bash(git status *).
+type Grant struct {
+	Tool string
+	// Source is the file that declares the grant.
+	Source string
 }
 
 func (p Plugin) File(path string) (File, bool) {
