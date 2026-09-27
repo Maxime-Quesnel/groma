@@ -25,14 +25,8 @@ var preapprovesAnyCommand = Rule{
 	Check: func(p plugin.Plugin) []Hit {
 		var hits []Hit
 		for _, g := range p.Grants {
-			if !anyCommand.MatchString(g.Tool) {
-				continue
-			}
-			evidence := "allowed-tools pre-approves " + g.Tool
-			if n := len(hits); n > 0 && hits[n-1].Subject == g.Source {
-				hits[n-1].Evidence = append(hits[n-1].Evidence, evidence)
-			} else {
-				hits = append(hits, Hit{Subject: g.Source, Evidence: []string{evidence}})
+			if anyCommand.MatchString(g.Tool) {
+				hits = addHit(hits, g.Source, "allowed-tools pre-approves "+g.Tool)
 			}
 		}
 		return hits

@@ -1,6 +1,8 @@
 package scan
 
 import (
+	"slices"
+
 	"github.com/Maxime-Quesnel/groma/internal/plugin"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
@@ -19,6 +21,7 @@ var Rules = []Rule{
 	hiddenUnicode,
 	hookRunsRemoteCode,
 	preapprovesAnyCommand,
+	readsCredentials,
 }
 
 func Check(p plugin.Plugin) []rule.Finding {
@@ -43,4 +46,16 @@ func eachFile(check func(plugin.File) []string) func(plugin.Plugin) []Hit {
 		}
 		return hits
 	}
+}
+
+// addHit files evidence under its subject, once.
+func addHit(hits []Hit, subject, evidence string) []Hit {
+	i := slices.IndexFunc(hits, func(h Hit) bool { return h.Subject == subject })
+	if i < 0 {
+		return append(hits, Hit{Subject: subject, Evidence: []string{evidence}})
+	}
+	if !slices.Contains(hits[i].Evidence, evidence) {
+		hits[i].Evidence = append(hits[i].Evidence, evidence)
+	}
+	return hits
 }
