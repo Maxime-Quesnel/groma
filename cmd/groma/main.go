@@ -21,6 +21,9 @@ Usage:
   groma scan          check what Claude Code loads: your settings, skills, agents
                       and hooks, every installed plugin, and this project's .claude
   groma scan <path>   check a plugin, a marketplace or a skill directory
+  groma bench <plugin>  measure how precisely Claude routes work to each agent
+                      of a plugin, from its eval suite (runs Claude on your
+                      Claude Code plan; see groma bench -h)
 
 Exit status: 0 when nothing is found, 1 when there are findings, 2 on error.
 `
@@ -37,6 +40,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "scan":
 		return runScan(args[1:], stdout, stderr)
+	case "bench":
+		return runBench(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
