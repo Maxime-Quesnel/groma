@@ -14,7 +14,7 @@ Problem, audience, positioning and roadmap: [docs/VISION.md](docs/VISION.md).
 
 ## Command
 
-`groma check <path>` takes a plugin, a marketplace, a `.claude` directory or a single file. It finds components where Claude Code looks for them: `SKILL.md` is a skill, a Markdown file with a header under `agents/` an agent, one under `commands/` a command, and `hooks/hooks.json`, a manifest's `hooks` or a settings file's `hooks` are hooks. A file found elsewhere is read by its content. It exits with 0 when there is no red flag, 1 when there is one, 2 on error.
+`groma check <path>` takes a plugin, a marketplace, a `.claude` directory or a single file. It finds components where Claude Code looks for them: `.claude-plugin/plugin.json` is a plugin, checked as a whole, `SKILL.md` a skill, a Markdown file with a header under `agents/` an agent, one under `commands/` a command, and `hooks/hooks.json`, a manifest's `hooks` or a settings file's `hooks` are hooks. A file found elsewhere is read by its content. It exits with 0 when there is no red flag, 1 when there is one, 2 on error.
 
 Set aside, not merged: `groma scan` and `groma bench` live on the branch `scan-and-bench`, and a first `groma expose` slice on `expose-agent-port-public`.
 
@@ -50,7 +50,7 @@ Layout:
 ```
 cmd/groma/             CLI entry point
 internal/claudecode/   what Claude Code accepts: fields, tools, hook events, values, doc links
-internal/component/    finds skills, agents, commands and hooks in a tree, and reads them
+internal/component/    finds plugins, skills, agents, commands and hooks in a tree, and reads them
 internal/frontmatter/  the YAML header of Markdown files, with line numbers and parse problems
 internal/rule/         rule metadata, Level, Finding
 internal/rules/        one file per rule, the All registry, testdata/<rule-id>/{bad,good}/

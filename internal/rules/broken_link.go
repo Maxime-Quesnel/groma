@@ -29,7 +29,7 @@ var brokenLink = Rule{
 		var evidence []string
 		for _, f := range markdownFiles(c, t) {
 			for _, l := range links(c, t, f) {
-				if !l.found {
+				if !l.found && !l.outside {
 					evidence = append(evidence, in(c, f, at(l.line, "%s isn't there", l.target)))
 				}
 			}
@@ -41,9 +41,10 @@ var brokenLink = Rule{
 type link struct {
 	line   int
 	target string
-	// file is the linked path in the tree, or "" when it lies outside.
-	file  string
-	found bool
+	// file is the linked path, relative to the tree's root; outside reports
+	// that it lies above the root, where groma can't see.
+	file           string
+	found, outside bool
 }
 
 var (
@@ -84,10 +85,7 @@ func links(c *component.Component, t *component.Tree, f component.File) []link {
 				target, _, _ = strings.Cut(target, "#")
 				target, _, _ = strings.Cut(target, "?")
 				file := path.Join(path.Dir(f.Path), target)
-				if strings.HasPrefix(file, "../") || file == ".." {
-					continue
-				}
-				found = append(found, link{i + 1, target, file, t.Exists(file)})
+				found = append(found, newLink(t, i+1, target, file))
 			}
 		}
 		for _, m := range variablePath.FindAllStringSubmatch(line, -1) {
@@ -96,9 +94,21 @@ func links(c *component.Component, t *component.Tree, f component.File) []link {
 				continue
 			}
 			rest := strings.TrimRight(m[2], ".,:;")
-			file := path.Join(root, rest)
-			found = append(found, link{i + 1, "${CLAUDE_" + m[1] + "}" + rest, file, t.Exists(file)})
+			found = append(found, newLink(t, i+1, "${CLAUDE_"+m[1]+"}"+rest, path.Join(root, rest)))
 		}
 	}
 	return found
+}
+
+func newLink(t *component.Tree, line int, target, file string) link {
+	outside := file == ".." || strings.HasPrefix(file, "../")
+	return link{line: line, target: target, file: file, outside: outside, found: !outside && t.Exists(file)}
+}
+
+// within reports whether p lies inside dir, both relative to the tree's root.
+func within(p, dir string) bool {
+	if dir == "." {
+		return p != ".." && !strings.HasPrefix(p, "../")
+	}
+	return p == dir || strings.HasPrefix(p, dir+"/")
 }

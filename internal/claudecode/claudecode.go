@@ -12,11 +12,20 @@ import (
 
 // Docs are the pages each list below comes from.
 const (
-	SkillsDocs    = "https://code.claude.com/docs/en/skills"
-	SubagentsDocs = "https://code.claude.com/docs/en/sub-agents"
-	HooksDocs     = "https://code.claude.com/docs/en/hooks"
-	ToolsDocs     = "https://code.claude.com/docs/en/tools-reference"
-	BestPractices = "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices"
+	SkillsDocs            = "https://code.claude.com/docs/en/skills"
+	SubagentsDocs         = "https://code.claude.com/docs/en/sub-agents"
+	HooksDocs             = "https://code.claude.com/docs/en/hooks"
+	HooksGuide            = "https://code.claude.com/docs/en/hooks-guide"
+	ToolsDocs             = "https://code.claude.com/docs/en/tools-reference"
+	PermissionsDocs       = "https://code.claude.com/docs/en/permissions"
+	PluginComponentsDocs  = "https://code.claude.com/docs/en/plugins/components"
+	PluginManifestDocs    = "https://code.claude.com/docs/en/plugins/manifest-reference"
+	PluginTroubleshooting = "https://code.claude.com/docs/en/plugins/troubleshooting"
+	BestPractices         = "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices"
+	PromptingDocs         = "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+	PluginDevAgents       = "https://github.com/anthropics/claude-code/tree/main/plugins/plugin-dev/skills/agent-development"
+	PluginDevCommands     = "https://github.com/anthropics/claude-code/tree/main/plugins/plugin-dev/skills/command-development"
+	SkillCreator          = "https://github.com/anthropics/skills/tree/main/skills/skill-creator"
 )
 
 var SkillFields = []string{
@@ -39,9 +48,8 @@ var AgentFields = []string{
 }
 
 // PluginIgnoredAgentFields are agent fields Claude Code ignores when the agent
-// ships in a plugin. initialPrompt is ignored too, but only ever applies to an
-// agent run as the main session's, which a plugin agent can be.
-var PluginIgnoredAgentFields = []string{"permissionMode", "mcpServers", "hooks"}
+// ships in a plugin.
+var PluginIgnoredAgentFields = []string{"permissionMode", "mcpServers", "hooks", "initialPrompt"}
 
 var Tools = []string{
 	"Agent", "Artifact", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList",
@@ -60,7 +68,7 @@ var Tools = []string{
 // them.
 var FormerTools = map[string]string{
 	"MultiEdit":    "Edit",
-	"BashOutput":   "TaskOutput",
+	"BashOutput":   "Read",
 	"KillShell":    "TaskStop",
 	"KillBash":     "TaskStop",
 	"NotebookRead": "Read",
@@ -115,8 +123,80 @@ var HandlerFields = map[string]struct{ Required, Optional []string }{
 	"command":  {[]string{"command"}, []string{"args", "async", "asyncRewake", "shell"}},
 	"http":     {[]string{"url"}, []string{"headers", "allowedEnvVars"}},
 	"mcp_tool": {[]string{"server", "tool"}, []string{"input"}},
-	"prompt":   {[]string{"prompt"}, []string{"model"}},
+	"prompt":   {[]string{"prompt"}, []string{"model", "continueOnBlock"}},
 	"agent":    {[]string{"prompt"}, []string{"model"}},
+}
+
+// hookTypes lists the hook types each event runs; an event missing from it
+// runs all five.
+var hookTypes = map[string][]string{
+	"PermissionRequest": {"command", "http", "mcp_tool", "prompt"},
+	"SessionStart":      {"command", "mcp_tool"},
+	"Setup":             {"command", "mcp_tool"},
+}
+
+func init() {
+	for _, event := range []string{
+		"ConfigChange", "CwdChanged", "DirectoryAdded", "Elicitation", "ElicitationResult", "FileChanged",
+		"InstructionsLoaded", "MessageDisplay", "Notification", "PostCompact", "PostModelSwitch", "PreCompact",
+		"PreModelSwitch", "SessionEnd", "StopFailure", "SubagentStart", "WorktreeCreate", "WorktreeRemove",
+	} {
+		hookTypes[event] = []string{"command", "http", "mcp_tool"}
+	}
+}
+
+// HookTypes returns the hook types an event runs.
+func HookTypes(event string) []string {
+	if types, ok := hookTypes[event]; ok {
+		return types
+	}
+	return []string{"command", "http", "mcp_tool", "prompt", "agent"}
+}
+
+// MatcherValues are the values an event with a fixed set of matcher values
+// matches against.
+var MatcherValues = map[string][]string{
+	"SessionStart":   {"startup", "resume", "clear", "compact", "fork"},
+	"Setup":          {"init", "maintenance"},
+	"SessionEnd":     {"clear", "resume", "logout", "prompt_input_exit", "other"},
+	"PreCompact":     {"manual", "auto"},
+	"PostCompact":    {"manual", "auto"},
+	"ConfigChange":   {"user_settings", "project_settings", "local_settings", "policy_settings", "skills"},
+	"DirectoryAdded": {"slash_command", "register_repo_root"},
+	"Notification": {"permission_prompt", "idle_prompt", "auth_success", "elicitation_dialog", "elicitation_url_dialog",
+		"elicitation_complete", "elicitation_response", "agent_needs_input", "agent_completed",
+		"quota_auto_resume_fired", "quota_auto_resume_stale", "quota_auto_resume_disabled"},
+	"InstructionsLoaded": {"session_start", "nested_traversal", "path_glob_match", "include", "compact"},
+	"StopFailure": {"rate_limit", "overloaded", "authentication_failed", "oauth_org_not_allowed", "account_on_hold",
+		"billing_error", "invalid_request", "model_not_found", "server_error", "max_output_tokens",
+		"cloud_credential_error", "unknown"},
+}
+
+var exactMatcher = regexp.MustCompile(`^[A-Za-z0-9_, |-]+$`)
+
+// MatcherAlternatives returns the exact values a matcher lists, separated by
+// | or commas. A matcher with any other character is a regular expression,
+// and "" or * matches everything; neither has alternatives to check.
+func MatcherAlternatives(matcher string) ([]string, bool) {
+	if !exactMatcher.MatchString(matcher) {
+		return nil, false
+	}
+	var alternatives []string
+	for _, a := range strings.FieldsFunc(matcher, func(r rune) bool { return r == '|' || r == ',' }) {
+		if a = strings.TrimSpace(a); a != "" {
+			alternatives = append(alternatives, a)
+		}
+	}
+	return alternatives, len(alternatives) > 0
+}
+
+// EnvFileEvents are the only events whose hooks get CLAUDE_ENV_FILE.
+var EnvFileEvents = []string{"SessionStart", "Setup", "CwdChanged", "FileChanged"}
+
+// BlockingEvents are events a hook can block with exit 2.
+var BlockingEvents = []string{
+	"PreToolUse", "UserPromptSubmit", "UserPromptExpansion", "Stop", "SubagentStop",
+	"TeammateIdle", "TaskCreated", "TaskCompleted", "PreModelSwitch",
 }
 
 // CommonHandlerFields apply to every hook type.

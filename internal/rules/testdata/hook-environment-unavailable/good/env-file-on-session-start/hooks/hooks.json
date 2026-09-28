@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"export STAGE=dev\" >> \"$CLAUDE_ENV_FILE\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo done >> /tmp/claude-stops.log"
+          }
+        ]
+      }
+    ]
+  }
+}

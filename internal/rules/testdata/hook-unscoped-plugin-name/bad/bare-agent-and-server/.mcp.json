@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "db": {
+      "command": "db-server"
+    }
+  }
+}

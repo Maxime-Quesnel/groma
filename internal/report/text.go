@@ -24,9 +24,10 @@ const (
 // then every red flag, then a summary line.
 func Text(w io.Writer, target string, components []*component.Component, findings []rule.Finding) {
 	st := style.For(w)
-	byPath := map[string][]rule.Finding{}
+	type key struct{ path, kind string }
+	byComponent := map[key][]rule.Finding{}
 	for _, f := range findings {
-		byPath[f.Path] = append(byPath[f.Path], f)
+		byComponent[key{f.Path, f.Kind}] = append(byComponent[key{f.Path, f.Kind}], f)
 	}
 	fmt.Fprintf(w, "%s\n\n", st.Dim(fmt.Sprintf("Checking %s · %s", target, inventory(components))))
 
@@ -36,7 +37,7 @@ func Text(w io.Writer, target string, components []*component.Component, finding
 	}
 	var redFlags []rule.Finding
 	for _, c := range components {
-		red, warnings := split(byPath[c.Path])
+		red, warnings := split(byComponent[key{c.Path, c.Kind.String()}])
 		redFlags = append(redFlags, red...)
 		mark, counts := st.Green("✔"), ""
 		switch {
@@ -105,7 +106,7 @@ func inventory(components []*component.Component) string {
 		counts[c.Kind]++
 	}
 	var parts []string
-	for _, k := range []component.Kind{component.Skill, component.Agent, component.Command, component.Hooks} {
+	for _, k := range []component.Kind{component.Plugin, component.Skill, component.Agent, component.Command, component.Hooks} {
 		if n := counts[k]; n > 0 {
 			noun := k.String()
 			if k == component.Hooks {

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Summarise: $ARGUMENTS"
+          }
+        ]
+      }
+    ]
+  }
+}

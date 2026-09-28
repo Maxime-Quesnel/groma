@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/format.sh"
+          },
+          {
+            "type": "command",
+            "command": "./scripts/format.sh --check"
+          }
+        ]
+      }
+    ]
+  }
+}

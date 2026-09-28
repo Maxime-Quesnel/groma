@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "Is this safe? $ARGUMENTS"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "shop",
+  "userConfig": {
+    "api_token": {
+      "type": "string",
+      "title": "Token",
+      "description": "API token",
+      "sensitive": true
+    }
+  }
+}

@@ -58,7 +58,9 @@ func TestLoadFindsComponentsWhereClaudeCodeLooks(t *testing.T) {
 
 	got := map[string]found{}
 	for _, c := range tree.Components {
-		got[c.Path] = found{c.Kind, c.Name(), c.InPlugin, c.Plugin, c.Project}
+		if c.Kind != Plugin {
+			got[c.Path] = found{c.Kind, c.Name(), c.InPlugin, c.Plugin, c.Project}
+		}
 	}
 	want := map[string]found{
 		"plugins/shop/skills/pdf/SKILL.md":      {Skill, "pdf-tools", true, "plugins/shop", ""},
@@ -89,8 +91,11 @@ func TestLoadOneFileReadsItsPlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(tree.Components) != 1 || tree.Components[0].Path != "agents/rails.md" || !tree.Components[0].InPlugin {
-		t.Fatalf("got %+v", tree.Components)
+	if len(tree.Targets) != 1 || tree.Targets[0].Path != "agents/rails.md" || !tree.Targets[0].InPlugin || tree.Targets[0].PluginName != "shop" {
+		t.Fatalf("got %+v", tree.Targets)
+	}
+	if len(tree.Components) != 3 {
+		t.Errorf("the plugin's other components weren't read: %d", len(tree.Components))
 	}
 	if _, ok := tree.File("scripts/check.sh"); !ok {
 		t.Error("the plugin around the file wasn't read")
@@ -106,7 +111,7 @@ func TestLoadGuessesAFileOutsideAnyComponentDirectory(t *testing.T) {
 
 	for file, kind := range map[string]Kind{"reviewer.md": Agent, "deploy.md": Command} {
 		tree, err := Load(filepath.Join(root, file))
-		if err != nil || len(tree.Components) != 1 || tree.Components[0].Kind != kind || !tree.Components[0].Guessed {
+		if err != nil || len(tree.Targets) != 1 || tree.Targets[0].Kind != kind || !tree.Targets[0].Guessed {
 			t.Errorf("%s: got %+v, %v", file, tree, err)
 		}
 	}
@@ -131,7 +136,9 @@ func TestHooksReadEveryDeclarationForm(t *testing.T) {
 
 	byPath := map[string]*Component{}
 	for _, c := range tree.Components {
-		byPath[c.Path] = c
+		if c.Kind != Plugin {
+			byPath[c.Path] = c
+		}
 	}
 	hooks := byPath["hooks/hooks.json"].Hooks
 	if len(hooks.Handlers) != 2 || hooks.Handlers[0].Where() != `PreToolUse (matcher "Bash"), hook 1` || hooks.Handlers[1].Type != "http" {

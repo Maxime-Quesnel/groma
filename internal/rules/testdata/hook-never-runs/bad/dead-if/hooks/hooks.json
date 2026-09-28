@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo a",
+            "if": "MultiEdit(db/**)"
+          },
+          {
+            "type": "command",
+            "command": "echo b",
+            "if": "Bash(git *)"
+          },
+          {
+            "type": "command",
+            "command": "echo c",
+            "if": "Edit(*.ts) || Write(*.ts)"
+          }
+        ]
+      }
+    ]
+  }
+}

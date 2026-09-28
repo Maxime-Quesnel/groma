@@ -41,7 +41,7 @@ go build -o groma ./cmd/groma
 
 ## Usage
 
-Point it at a plugin, a marketplace, a `.claude` directory or a single file. groma works out what each file is from where Claude Code looks for it: `SKILL.md` is a skill, a Markdown file under `agents/` an agent, under `commands/` a command, and `hooks/hooks.json`, a manifest's `hooks` or a settings file's `hooks` are hooks. A file found elsewhere is read by its content.
+Point it at a plugin, a marketplace, a `.claude` directory or a single file. groma works out what each file is from where Claude Code looks for it: `.claude-plugin/plugin.json` is a plugin, `SKILL.md` a skill, a Markdown file under `agents/` an agent, under `commands/` a command, and `hooks/hooks.json`, a manifest's `hooks` or a settings file's `hooks` are hooks. A file found elsewhere is read by its content.
 
 ```sh
 groma check ./my-plugin
@@ -50,13 +50,14 @@ groma check ~/.claude/plugins/marketplaces/my-marketplace
 ```
 
 ```
-Checking ./my-plugin · 2 skills, 3 agents, 1 hooks file
+Checking ./my-plugin · 1 plugin, 2 skills, 3 agents, 1 hooks file
 
-  ✖ agent   agents/reviewer.md      1 red flag ↓
+  ✔ plugin  .claude-plugin/plugin.json
+  ✖ agent   agents/reviewer.md          1 red flag ↓
   ✔ agent   agents/tester.md
   ✔ agent   agents/writer.md
   ✔ hooks   hooks/hooks.json
-  ▲ skill   skills/deploy/SKILL.md  1 warning
+  ▲ skill   skills/deploy/SKILL.md      1 warning
       Claude can start a workflow with side effects on its own · side-effects-model-invocable
       › named deploy, without disable-model-invocation: true
       Fix: Add disable-model-invocation: true, unless Claude is meant to run it unprompted.
@@ -68,14 +69,14 @@ Red flags
       › line 4: tools lists MultiEdit, which Claude Code no longer has; use Edit
       Fix: Use the tool's exact name, as the Claude Code tools reference spells it.
 
-✖ 1 red flag · 1 warning in 6 components
+✖ 1 red flag · 1 warning in 7 components
 ```
 
 groma exits with 0 when it finds no red flag, 1 when it finds at least one, and 2 on error, so a CI job can fail on red flags while warnings stay advice. It only reads: it never modifies a file, never runs the code it inspects, and sends nothing over the network. Secrets quoted in evidence, such as tokens in a hook command, are masked.
 
 ## What it checks
 
-Every rule cites its source, the Claude Code documentation or Anthropic guidance it enforces or the risk it guards against, and documents its known false positives next to its code.
+Every rule cites its source, the Claude Code documentation or Anthropic guidance it enforces or the risk it guards against, and documents its known false positives next to its code. Besides skills, agents, commands and hooks, groma checks each plugin as a whole, from its manifest.
 
 ### Red flags: security
 
@@ -88,48 +89,85 @@ Every rule cites its source, the Claude Code documentation or Anthropic guidance
 | `arguments-in-shell` | `$ARGUMENTS` or `$1` substituted, unquoted, into a command that runs without a prompt |
 | `prompt-injection` | Text telling Claude to ignore its instructions or to keep something from the user |
 | `bypass-permissions` | An agent that runs every tool without asking |
+| `hook-approves-every-permission` | A hook that allows every permission prompt, or switches the session to `bypassPermissions` |
 
 ### Red flags: what Claude Code won't load, won't run or ignores
 
 | Rule | Flags |
 |---|---|
 | `frontmatter-unreadable` | YAML that doesn't parse, or a header not on line 1: every field is dropped |
-| `agent-not-loaded` | An agent without a name or description, or named with `:` |
+| `agent-not-loaded` | A project agent without a name or description, or any agent named with `:` |
+| `component-not-loaded` | Components inside `.claude-plugin/`, agents or commands the manifest doesn't list, a skill folder without `SKILL.md` |
+| `plugin-claude-md` | A `CLAUDE.md` at the plugin's root, which Claude Code never loads |
+| `reserved-name` | A skill or command named `anthropic-skills`, or a skill folder named `synced` |
+| `skill-never-invocable` | `user-invocable: false` with `disable-model-invocation: true`: nobody can run it |
 | `field-typo` | `allowed_tools`, `tools` in a skill, `allowed-tools` in an agent: the setting silently doesn't apply |
 | `invalid-value` | A model, effort, colour, permission mode or yes/no value Claude Code doesn't accept |
 | `field-ignored` | A real field where it doesn't apply, such as `permissionMode` on a plugin agent or `name` on a command |
 | `unknown-tool` | A tool Claude Code doesn't have, including renamed or removed ones such as `MultiEdit` |
 | `tool-unavailable-to-agents` | `AskUserQuestion` and other tools no subagent ever gets |
+| `tool-allowed-and-denied` | A tool in both `tools` and `disallowedTools`, which removes it |
+| `disallowed-tool-specifier` | `disallowedTools: Bash(git push *)`, which removes all of Bash |
+| `permission-pattern-never-matches` | `Bash(git:* push)`, or a tool-name glob such as `*` or `mcp__slack-*__…` in `allowed-tools` |
+| `preloaded-skill-unavailable` | An agent preloading a skill with `disable-model-invocation: true`, or one its plugin doesn't have |
 | `duplicate-name` | Two agents, or a skill and a command, with the same name |
+| `unknown-component-reference` | `plugin:name`, `/plugin:name` or `@agent-plugin:name` naming nothing in that plugin |
+| `variable-not-substituted` | `$CLAUDE_PLUGIN_ROOT/` without braces, `${CLAUDE_PLUGIN_ROOT}` outside a plugin, `$ARGUMENTS.0`, `$IF(` |
+| `user-config-reference` | `${user_config.KEY}` the manifest doesn't declare, or a sensitive one in skill text |
+| `path-escapes-plugin` | A link or `${CLAUDE_PLUGIN_ROOT}/..` path that leaves the plugin, which breaks once installed |
 | `shell-not-preapproved` | Inline shell that `allowed-tools` doesn't cover, which aborts the skill outside auto mode |
 | `missing-script` | A hook or inline shell running a script that isn't there or isn't executable |
 | `hook-file-invalid` | A hooks file that isn't valid JSON or lacks the `{"hooks": ...}` shape |
 | `hook-unknown-event` | A hook on an event that doesn't exist, such as `preToolUse` |
 | `hook-handler-invalid` | A hook without a valid type, its required field, or a usable timeout |
+| `hook-type-unsupported` | A hook type the event doesn't run, such as a prompt hook on `SessionStart` |
 | `hook-field-ignored` | A `matcher` inside a hook, `once` in a hooks file, a header variable missing from `allowedEnvVars` |
-| `hook-never-runs` | A lowercase tool matcher, or an `if` condition on an event that never evaluates it |
+| `hook-never-runs` | A matcher that can't match, such as `bash` or `mcp__memory`, or an `if` that never holds |
 | `hook-matcher-ignored` | A matcher on an event that fires every time, such as `Stop` |
+| `hook-unscoped-plugin-name` | A plugin hook naming its own agent or MCP server without the plugin's prefix |
 | `hook-user-config-in-shell` | `${user_config.…}` in a shell-form command, which Claude Code refuses |
+| `hook-async-cannot-block` | An `async` hook written to block or decide, which it can't |
+| `hook-exit-1-does-not-block` | A guard that denies with `exit 1`, which lets the action through |
+| `hook-output-ignored` | `permissionDecision` outside `hookSpecificOutput`, no `hookEventName`, or `"decision": "approve"` |
+| `hook-environment-unavailable` | A hook writing to `/dev/tty`, or using `CLAUDE_ENV_FILE` on an event that doesn't get it |
+| `hook-relative-script` | A plugin hook running `scripts/x.sh` relative to the user's project instead of the plugin |
 
 ### Warnings: works, but not as Claude Code's documentation recommends
 
 | Rule | Flags |
 |---|---|
 | `unknown-field` | A field Claude Code's documentation doesn't list, such as `version` |
+| `field-without-effect` | `when_to_use` or `paths` on a skill Claude can't invoke, a `timeout` on an async hook |
 | `name-format` | A name that isn't lowercase with hyphens |
+| `skill-name-mismatch` | A skill named differently from its folder |
+| `root-skill-unnamed` | A `SKILL.md` at the plugin's root without a `name` |
 | `description-missing` | No description to route on |
 | `description-too-long` | Over 1,024 characters, or cut by Claude Code's 1,536-character listing |
 | `description-no-trigger` | A description that doesn't say when to use it |
 | `description-voice` | A description in the first or second person |
+| `description-emphatic` | MUST, CRITICAL or ALWAYS in capitals in a description, which current models over-trigger on |
+| `skill-listing-budget` | A plugin whose skill descriptions alone overflow Claude Code's listing |
+| `trigger-in-body` | A "When to use" section in a skill's body, which loads only after Claude chose it |
 | `body-empty` | Nothing after the frontmatter |
 | `body-too-long` | A skill or command body over 500 lines |
+| `body-addressed-to-user` | A body that opens with "This command will…" instead of instructions for Claude |
+| `emphasis-overused` | Five or more lines of MUST, NEVER, ALWAYS or CRITICAL in capitals |
+| `time-sensitive-text` | "Before August 2025, …": instructions that depend on the date |
 | `broken-link` | A link or `${CLAUDE_SKILL_DIR}` path to a file that isn't there |
 | `nested-reference` | A reference reachable only through another reference |
+| `reference-no-toc` | A reference file over 100 lines without a table of contents |
 | `non-portable-path` | A path into someone's home directory, or with backslashes |
 | `agent-tools-unrestricted` | An agent that can use every tool |
+| `agent-memory-grants-write` | `memory` on a read-only agent, which gives it Write and Edit |
+| `agent-prompt-voice` | An agent prompt that opens in the first person |
+| `agent-no-output-format` | An agent prompt that never says what to return |
 | `argument-hint-missing` | A component that takes arguments without an `argument-hint` |
 | `side-effects-model-invocable` | A deploy, release or push workflow Claude can start on its own |
 | `unquoted-path` | `${CLAUDE_PLUGIN_ROOT}` left unquoted in a shell command |
 | `stop-hook-can-loop` | A Stop hook that can block without reading `stop_hook_active` |
+| `hook-matcher-dead-alternative` | Part of a matcher that can never match, such as `MultiEdit` |
+| `hook-deprecated-decision` | A PreToolUse hook using the deprecated top-level `decision` |
+| `hook-agent-experimental` | An agent hook, which Claude Code marks experimental |
+| `hook-timeout-in-milliseconds` | A timeout over an hour, likely meant in milliseconds |
 
 groma is a safety net, not a guarantee. It checks against what Claude Code's documentation says today, so a field or tool added by a newer release may show up as unknown until groma learns it; and a clean report means no known mistake was found, not that a plugin is safe.

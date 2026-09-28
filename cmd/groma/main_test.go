@@ -13,7 +13,7 @@ func TestCheckReportsRedFlagsAndExitsOne(t *testing.T) {
 	err := os.CopyFS(dir, fstest.MapFS{
 		".claude-plugin/plugin.json": {Data: []byte(`{"name": "shop"}`)},
 		"skills/pdf/SKILL.md":        {Data: []byte("---\nname: pdf\ndescription: Extracts text from PDFs. Use when the user mentions a PDF.\n---\n\nRead the PDF.\n")},
-		"agents/rails.md":            {Data: []byte("---\nname: rails\ndescription: Reviews Rails code. Use after a Rails change.\ntools: Read, Grep\npermissionMode: plan\n---\n\nYou review Rails code.\n")},
+		"agents/rails.md":            {Data: []byte("---\nname: rails\ndescription: Reviews Rails code. Use after a Rails change.\ntools: Read, Grep\npermissionMode: plan\n---\n\nYou review Rails code and report each bug with its file and line.\n")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -24,12 +24,12 @@ func TestCheckReportsRedFlagsAndExitsOne(t *testing.T) {
 
 	out := stdout.String()
 	for _, want := range []string{
-		"1 skill, 1 agent",
+		"1 plugin, 1 skill, 1 agent",
 		"✔ skill   skills/pdf/SKILL.md",
 		"✖ agent   agents/rails.md",
 		"Red flags",
 		"line 5: permissionMode is ignored on an agent that ships in a plugin",
-		"✖ 1 red flag in 2 components",
+		"✖ 1 red flag in 3 components",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s%s", want, out, stderr.String())
