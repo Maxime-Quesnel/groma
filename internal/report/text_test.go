@@ -18,22 +18,22 @@ func TestTextSortsBySeverityAndSummarises(t *testing.T) {
 		{Rule: high, Subject: "OpenClaw", Evidence: []string{"0.0.0.0:3"}, Remediation: "close B in OpenClaw"},
 	})
 
-	want := `CRITICAL  expose.a
-          A is open
-          - 0.0.0.0:1
-          fix: close A
+	want := ` CRITICAL  A is open
+           expose.a
+           › 0.0.0.0:1
+           Fix: close A
 
-HIGH      expose.b
-          B is open
-          - 0.0.0.0:2
-          fix: close B
+ HIGH      B is open
+           expose.b
+           › 0.0.0.0:2
+           Fix: close B
 
-HIGH      expose.b  OpenClaw
-          B is open
-          - 0.0.0.0:3
-          fix: close B in OpenClaw
+ HIGH      B is open
+           OpenClaw · expose.b
+           › 0.0.0.0:3
+           Fix: close B in OpenClaw
 
-3 findings: 1 critical, 2 high
+✖ 3 findings · 1 critical · 2 high
 `
 	if out.String() != want {
 		t.Errorf("got:\n%s\nwant:\n%s", out.String(), want)
@@ -45,7 +45,7 @@ func TestTextWithoutFindings(t *testing.T) {
 
 	Text(&out, nil)
 
-	if out.String() != "No findings.\n" {
+	if out.String() != "✔ No findings.\n" {
 		t.Errorf("got %q", out.String())
 	}
 }
@@ -99,7 +99,23 @@ func TestTextCapsEvidence(t *testing.T) {
 		Evidence: strings.Split("1 2 3 4 5 6 7 8", " "),
 	}})
 
-	if s := out.String(); !strings.Contains(s, "- 5\n") || strings.Contains(s, "- 6\n") || !strings.Contains(s, "- and 3 more\n") {
+	if s := out.String(); !strings.Contains(s, "› 5\n") || strings.Contains(s, "› 6\n") || !strings.Contains(s, "› and 3 more\n") {
 		t.Errorf("got %q", s)
+	}
+}
+
+func TestTextWrapsLongFixesUnderTheFinding(t *testing.T) {
+	var out strings.Builder
+	long := strings.Repeat("word ", 40)
+
+	Text(&out, []rule.Finding{{Rule: rule.Meta{ID: "scan.x", Severity: rule.Low, Title: "X", Remediation: long}}})
+
+	for _, line := range strings.Split(out.String(), "\n") {
+		if len([]rune(line)) > wrapAt {
+			t.Errorf("line longer than %d: %q", wrapAt, line)
+		}
+		if strings.HasPrefix(line, "word") {
+			t.Errorf("wrapped line lost its indent: %q", line)
+		}
 	}
 }

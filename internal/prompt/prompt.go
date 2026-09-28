@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+
+	"github.com/Maxime-Quesnel/groma/internal/style"
 )
 
 type Option struct {
@@ -29,10 +31,10 @@ type Terminal struct {
 	close func() error
 }
 
-const (
-	bold, dim, green, cyan, reset = "\x1b[1m", "\x1b[2m", "\x1b[32m", "\x1b[36m", "\x1b[0m"
-	hideCursor, showCursor        = "\x1b[?25l", "\x1b[?25h"
-)
+const hideCursor, showCursor = "\x1b[?25l", "\x1b[?25h"
+
+// Prompts always draw on a terminal, so they always color.
+var st = style.On()
 
 // Open takes over the controlling terminal until Close restores it.
 func Open() (*Terminal, error) {
@@ -81,6 +83,12 @@ func (t *Terminal) Say(format string, a ...any) {
 	fmt.Fprintf(t.out, format+"\r\n", a...)
 }
 
+// Done records an answer the way a prompt does once answered, for answers
+// that need no question, such as the only plugin there is.
+func (t *Terminal) Done(title, answer string) {
+	t.Say("%s %s  %s", st.Green("✔"), st.Bold(title), st.Cyan(answer))
+}
+
 // Select lets the user pick one option, starting on cursor, and returns its
 // index.
 func (t *Terminal) Select(title string, options []Option, cursor int) (int, error) {
@@ -122,7 +130,7 @@ func (t *Terminal) choose(title string, options []Option, cursor int, multi bool
 			}
 		case keyEnter:
 			t.erase(drawn)
-			t.Say("%s✔%s %s  %s%s%s", green, reset, title, cyan, answer(opts, cursor, multi), reset)
+			t.Done(title, answer(opts, cursor, multi))
 			return cursor, opts, nil
 		case keyCancel:
 			t.erase(drawn)
@@ -137,24 +145,29 @@ func (t *Terminal) draw(title string, opts []Option, cursor int, multi bool, dra
 	if multi {
 		help = "↑↓ move · space check · a all · enter confirm"
 	}
-	t.Say("%s? %s%s  %s%s%s", bold, title, reset, dim, help, reset)
+	t.Say("%s %s  %s", st.Cyan("?"), st.Bold(title), st.Dim(help))
+	// Labels share one width, so that hints line up in a column.
+	width := 0
+	for _, o := range opts {
+		width = max(width, len([]rune(o.Label)))
+	}
 	for i, o := range opts {
-		pointer, label := "  ", o.Label
+		pointer, label := "  ", style.Pad(o.Label, width, func(s string) string { return s })
 		if i == cursor {
-			pointer, label = cyan+"❯ ", cyan+o.Label+reset
+			pointer, label = st.Cyan("❯ "), style.Pad(o.Label, width, st.Cyan)
 		}
 		box := ""
 		if multi {
-			box = "[ ] "
+			box = st.Dim("○ ")
 			if o.Checked {
-				box = green + "[x]" + reset + " "
+				box = st.Green("● ")
 			}
 		}
 		hint := ""
 		if o.Hint != "" {
-			hint = "  " + dim + o.Hint + reset
+			hint = "  " + st.Dim(o.Hint)
 		}
-		t.Say("%s%s%s%s%s", pointer, reset, box, label, hint)
+		t.Say("%s%s%s", pointer, box, strings.TrimRight(label+hint, " "))
 	}
 	return len(opts) + 1
 }

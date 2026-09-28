@@ -80,7 +80,7 @@ func TestDrawShowsHintsBoxesAndPointer(t *testing.T) {
 	term.Check("Options?", []Option{{Label: "Run scaffolds", Hint: "as you", Checked: true}, {Label: "Judge with Sonnet"}})
 
 	plain := ansi.ReplaceAllString(out.String(), "")
-	for _, want := range []string{"? Options?", "❯ [x] Run scaffolds  as you", "  [ ] Judge with Sonnet"} {
+	for _, want := range []string{"? Options?", "❯ ● Run scaffolds      as you", "  ○ Judge with Sonnet\r\n"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("drawing lacks %q:\n%s", want, plain)
 		}
