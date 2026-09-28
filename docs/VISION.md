@@ -40,6 +40,7 @@ A linter for Claude Code plugins, in the spirit of RuboCop for Ruby: rules that 
 
   It exits with 1 on a red flag, so CI can block a release on them while warnings stay advice.
 - **`groma fix <path>`** corrects what a rule can correct on its own, shows the diff and asks before writing. Safe fixes change nothing where a component works today; `--unsafe` adds the ones that change what runs, when, or with which tools.
+- **The groma plugin for Claude Code** runs the checks on each component right after Claude edits it, and tells Claude what to fix, so components come out right as they're written.
 - **`.groma.yml`** turns rules off, everywhere or for some paths, and a `# groma:disable <rule>` comment does it for one component, for a team whose conventions differ from a rule on purpose.
 
 ## Design choices
@@ -64,6 +65,7 @@ What was set aside is kept, not deleted: `scan` and `bench` on the branch `scan-
 - `groma fix`, safe and `--unsafe`, with diff and confirmation.
 - `.groma.yml` and `groma:disable` comments.
 - v0.1.0: static binaries for Linux and macOS, with checksums and build provenance.
+- v0.2.0: a Claude Code plugin whose hook checks each component as Claude writes it, and a `/groma:check` skill.
 
 **Next**
 

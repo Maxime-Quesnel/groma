@@ -43,7 +43,9 @@ var unknownComponentReference = Rule{
 		for i, line := range strings.Split(string(c.Content), "\n") {
 			for _, m := range reference.FindAllStringSubmatch(line, -1) {
 				plugin, id := m[1], m[2]
-				if slices.Contains(known[plugin], id) {
+				// groma:disable is groma's own directive, not a reference
+				// to a plugin named groma.
+				if slices.Contains(known[plugin], id) || plugin == "groma" && id == "disable" {
 					continue
 				}
 				e := at(i+1, "%s:%s names nothing in %s", plugin, id, plugin)

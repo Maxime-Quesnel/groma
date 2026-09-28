@@ -81,6 +81,20 @@ Red flags
 
 groma exits with 0 when it finds no red flag, 1 when it finds at least one, and 2 on error, so a CI job can fail on red flags while warnings stay advice. `check` only reads: it never modifies a file, never runs the code it inspects, and sends nothing over the network. Secrets quoted in evidence, such as tokens in a hook command, are masked.
 
+## Use it from Claude Code
+
+The groma plugin checks each skill, agent, command or hooks file right after Claude edits it, and tells Claude what to fix, so a component comes out right the first time. It needs the groma binary on your `PATH`, version 0.2.0 or later; without it, the plugin does nothing. In Claude Code:
+
+```
+/plugin marketplace add Maxime-Quesnel/groma
+/plugin install groma@groma
+```
+
+- **After every Edit or Write**, a hook runs `groma hook` on the component the edited file belongs to. Red flags go back to Claude next to the tool's result, as something to fix before moving on; warnings go back as context. Nothing is said when the file isn't part of a component or has nothing to report.
+- **`/groma:check [path]`** checks a whole plugin, marketplace or `.claude` directory on demand, proposes groma's fixes as a diff, and applies the ones you agree to.
+
+`.groma.yml` and `# groma:disable` comments apply to the hook too, so a rule you turned off stays quiet.
+
 ## Fix what can be fixed
 
 Like RuboCop's autocorrect, `groma fix` corrects what a rule can correct on its own. It shows the diff, then asks before writing anything, and writes nothing when it can't ask, such as in CI:

@@ -1,0 +1,12 @@
+{
+  "name": "groma",
+  "version": "0.2.0",
+  "description": "Checks each skill, agent, command and hooks file Claude writes against Claude Code's documentation, and tells Claude what to fix. Needs the groma binary on your PATH.",
+  "author": {
+    "name": "Maxime Quesnel"
+  },
+  "homepage": "https://github.com/Maxime-Quesnel/groma",
+  "repository": "https://github.com/Maxime-Quesnel/groma",
+  "license": "MIT",
+  "keywords": ["lint", "plugins", "skills", "agents", "hooks"]
+}

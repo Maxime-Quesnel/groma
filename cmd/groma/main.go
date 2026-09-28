@@ -28,6 +28,8 @@ func printUsage(w io.Writer) {
 	command("groma fix <path>", "correct what can be corrected without changing what runs;")
 	command("", "shows the diff and asks before writing")
 	command("  --unsafe", "also fixes what changes what runs, when, or with which tools")
+	command("groma hook", "Claude Code's PostToolUse hook, run by the groma plugin: checks")
+	command("", "the component Claude just edited and tells Claude what to fix")
 	fmt.Fprintf(w, "\n%s  turn rules off in %s or with a %s comment\n", st.Bold("Config"), st.Cyan(".groma.yml"), st.Cyan("# groma:disable <rule>"))
 	fmt.Fprintf(w, "%s  0 no red flags %s 1 red flags %s 2 error\n", st.Bold("Exit status"), st.Dim("·"), st.Dim("·"))
 	fmt.Fprintf(w, "%s  groma --version\n", st.Bold("Version"))
@@ -58,6 +60,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runCheck(args[1:], stdout, stderr)
 	case "fix":
 		return runFix(args[1:], stdin, stdout, stderr)
+	case "hook":
+		return runHook(stdin, stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return 0

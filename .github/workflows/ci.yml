@@ -24,5 +24,7 @@ jobs:
           if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
       - run: go vet ./...
       - run: go test ./...
-      - name: groma check on groma's own skill
-        run: go run ./cmd/groma check .claude
+      - name: groma check on groma's own skill and plugin
+        run: |
+          go run ./cmd/groma check .claude
+          go run ./cmd/groma check plugin
