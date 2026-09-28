@@ -27,8 +27,8 @@ func Text(w io.Writer, s Suite, r Result, judge string, runs []Run, scores []Sco
 		}
 	}
 	fmt.Fprintf(w, "%s  %s\n", st.Bold("groma bench · "+s.Plugin), st.Dim(fmt.Sprintf("%s · %s", count(len(runs), "run"), duration(r.DurationSeconds))))
-	fmt.Fprintln(w, st.Dim(fmt.Sprintf("model %s · judge %s · Claude Code %s · about $%.2f at list price",
-		cmp.Or(r.Suite.ModelOverride, "Claude Code's default"), cmp.Or(judge, "claude plugin eval's default"), r.ClaudeVersion, r.CostUSD)))
+	fmt.Fprintln(w, st.Dim(fmt.Sprintf("main session %s · judge %s · Claude Code %s · about $%.2f at list price",
+		cmp.Or(r.Suite.ModelOverride, "Claude Code's default model"), cmp.Or(judge, "claude plugin eval's default"), r.ClaudeVersion, r.CostUSD)))
 	if r.Partial {
 		fmt.Fprintln(w, st.Yellow(fmt.Sprintf("⚠ Partial: the run stopped early (%s), so fewer runs than planned were scored.", r.PartialReason)))
 	}
@@ -43,6 +43,7 @@ func Text(w io.Writer, s Suite, r Result, judge string, runs []Run, scores []Sco
 		rLo, rHi := sc.RecallInterval()
 		agentRows = append(agentRows, []style.Cell{
 			{Text: short(sc.Agent), Styled: st.Bold(short(sc.Agent))},
+			agentModel(st, s.Models[sc.Agent]),
 			share(st, p, pOK, pLo, pHi), share(st, rc, rOK, rLo, rHi),
 			work(st, sc.Checks), work(st, sc.Judge),
 			style.Plain(fmt.Sprintf("%s · %s", count(sc.Scenarios(), "scenario"), count(sc.Expected+sc.Other, "run"))),
@@ -54,7 +55,7 @@ func Text(w io.Writer, s Suite, r Result, judge string, runs []Run, scores []Sco
 			notes = append(notes, st.Red(fmt.Sprintf("› %s was picked wrongly in %s", short(sc.Agent), listCounts(sc.WrongCases, func(c string) string { return c }))))
 		}
 	}
-	st.Table(w, []string{"Agent", "Precision", "Recall", "Work: checks", "Work: judge", "Based on"}, agentRows)
+	st.Table(w, []string{"Agent", "Model", "Precision", "Recall", "Work: checks", "Work: judge", "Based on"}, agentRows)
 	for _, n := range notes {
 		fmt.Fprintln(w, n)
 	}
@@ -103,6 +104,15 @@ func Text(w io.Writer, s Suite, r Result, judge string, runs []Run, scores []Sco
 	if failed > 0 {
 		fmt.Fprintln(w, st.Dim(fmt.Sprintf("Ended in an error such as a timeout: %s. Timed-out runs are left out of work.", count(failed, "run"))))
 	}
+}
+
+// agentModel names the model an agent runs on: the one its frontmatter sets,
+// or the main session's when it sets none or asks to inherit it.
+func agentModel(st style.Style, model string) style.Cell {
+	if model == "" || model == "inherit" {
+		return style.Cell{Text: "main session's", Styled: st.Dim("main session's")}
+	}
+	return style.Plain(model)
 }
 
 // grade colors a share: green when it is high, red when it is low.

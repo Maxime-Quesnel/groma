@@ -223,12 +223,16 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 	fmt.Fprintln(w)
 }
 
-// userModel returns the model the user picked in Claude Code, and how to
-// name it in output.
+// userModel returns the model the user runs Claude Code with, and how to
+// name it in output: the model of the Claude Code session groma runs in, if
+// any, then the model /model saved for new sessions.
 func userModel() (model, label string) {
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
 	configDir := cmp.Or(os.Getenv("CLAUDE_CONFIG_DIR"), filepath.Join(home, ".claude"))
+	if model := claudecode.SessionModel(configDir, os.Getenv("CLAUDE_CODE_SESSION_ID")); model != "" {
+		return model, model + ", the model of this Claude Code session"
+	}
 	model, source := claudecode.SelectedModel(configDir, cwd)
 	switch {
 	case model == "":

@@ -22,6 +22,8 @@ type Suite struct {
 	// Agents are the plugin's agents by the name Claude dispatches them
 	// with, "plugin:agent".
 	Agents []string
+	// Models holds the model each agent's frontmatter sets, if any.
+	Models map[string]string
 	Cases  []Case
 }
 
@@ -49,10 +51,16 @@ func Load(pluginDir string, caseDirs ...string) (Suite, error) {
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return Suite{}, err
 	}
-	s := Suite{Plugin: manifest.Name}
+	s := Suite{Plugin: manifest.Name, Models: map[string]string{}}
 	agents, _ := filepath.Glob(filepath.Join(pluginDir, "agents", "*.md"))
 	for _, a := range agents {
-		s.Agents = append(s.Agents, s.Plugin+":"+strings.TrimSuffix(filepath.Base(a), ".md"))
+		name := s.Plugin + ":" + strings.TrimSuffix(filepath.Base(a), ".md")
+		s.Agents = append(s.Agents, name)
+		if content, err := os.ReadFile(a); err == nil {
+			if model, ok := frontmatter.Scalar(content, "model"); ok {
+				s.Models[name] = model
+			}
+		}
 	}
 	for _, dir := range caseDirs {
 		entries, err := os.ReadDir(dir)

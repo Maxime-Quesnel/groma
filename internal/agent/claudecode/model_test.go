@@ -46,3 +46,30 @@ func TestSelectedModelFollowsClaudeCodePrecedence(t *testing.T) {
 		t.Errorf("env over settings: got %q from %q", model, source)
 	}
 }
+
+func TestSessionModelReadsTheLastAnswer(t *testing.T) {
+	config := t.TempDir()
+	transcript := filepath.Join(config, "projects", "-work-shop", "abc-123.jsonl")
+	if err := os.MkdirAll(filepath.Dir(transcript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lines := `{"type":"user","message":{"role":"user","content":"hi"}}
+{"type":"assistant","message":{"model":"claude-sonnet-5","content":[]}}
+{"type":"assistant","message":{"model":"claude-opus-5-5","content":[]}}
+{"type":"user","message":{"content":"the word \"assistant\" in a user message"}}
+{"type":"assistant","message":{"model":"<synthetic>","content":[]}}
+`
+	if err := os.WriteFile(transcript, []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := SessionModel(config, "abc-123"); got != "claude-opus-5-5" {
+		t.Errorf("got %q, want the last real model", got)
+	}
+	if got := SessionModel(config, "other"); got != "" {
+		t.Errorf("unknown session: got %q", got)
+	}
+	if got := SessionModel(config, ""); got != "" {
+		t.Errorf("no session: got %q", got)
+	}
+}

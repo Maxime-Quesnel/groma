@@ -19,7 +19,7 @@ func testPlugin(t *testing.T) string {
 	avoids := "---\ntype: tool_used\ntool: Agent\ninput_match: '\"subagent_type\"\\s*:\\s*\"shop:rails\"'\nmin: 0\nmax: 0\n---\n"
 	err := os.CopyFS(dir, fstest.MapFS{
 		".claude-plugin/plugin.json":              {Data: []byte(`{"name": "shop"}`)},
-		"agents/rails.md":                         {Data: []byte("---\nname: rails\n---\n")},
+		"agents/rails.md":                         {Data: []byte("---\nname: rails\nmodel: sonnet\n---\n")},
 		"agents/ruby.md":                          {Data: []byte("---\nname: ruby\n---\n")},
 		"evals/slow-page/prompt.md":               {Data: []byte("Make the page fast.")},
 		"evals/slow-page/graders/picks.md":        {Data: []byte(picks)},
@@ -45,6 +45,9 @@ func TestLoadTakesGroundTruthFromTheCasesGraders(t *testing.T) {
 
 	if s.Plugin != "shop" || !slices.Equal(s.Agents, []string{"shop:rails", "shop:ruby"}) {
 		t.Errorf("plugin %q agents %v", s.Plugin, s.Agents)
+	}
+	if !reflect.DeepEqual(s.Models, map[string]string{"shop:rails": "sonnet"}) {
+		t.Errorf("models %v", s.Models)
 	}
 	got := map[string][2][]string{}
 	for _, c := range s.Cases {
@@ -258,7 +261,7 @@ func TestTimedOutRunsWithoutDispatchDecideNothing(t *testing.T) {
 }
 
 func TestTextPutsTheCasesThatWentWrongFirst(t *testing.T) {
-	s := Suite{Plugin: "shop", Agents: []string{"shop:rails", "shop:ruby"}, Cases: []Case{
+	s := Suite{Plugin: "shop", Agents: []string{"shop:rails", "shop:ruby"}, Models: map[string]string{"shop:rails": "sonnet"}, Cases: []Case{
 		{Name: "a-fine-case", Scenario: "a", Expect: []string{"shop:rails"}},
 		{Name: "b-broken-case", Scenario: "b", Expect: []string{"shop:rails"}},
 	}}
@@ -274,7 +277,8 @@ func TestTextPutsTheCasesThatWentWrongFirst(t *testing.T) {
 
 	report := out.String()
 	for _, want := range []string{
-		"│ rails │ 100%  ",
+		"│ rails │ sonnet │ 100%  ",
+		"main session Claude Code's default model · judge sonnet",
 		"│ 67%  ",
 		"› rails was missed in 1 run: Claude picked ruby ×1",
 		"│ b-broken-case │ rails   │ ✖ 1/2 │ ruby ×1, timed out ×1 │",
