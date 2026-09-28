@@ -30,36 +30,51 @@ Nothing in the session shows it. The plugin looks fine, and part of it doesn't w
 
 groma is not a sandbox, not a runtime monitor, and not a guarantee.
 
-## `groma check`
+## What groma does
 
-Given a plugin, a marketplace, a `.claude` directory or a single file, it finds each component where Claude Code looks for it and checks it. The report lists every component, with its warnings under it, and ends with the red flags:
+A linter for Claude Code plugins, in the spirit of RuboCop for Ruby: rules that encode the documented way of writing each component, a report, and fixes for what can be fixed mechanically.
 
-- **Red flags**: a security risk (hidden Unicode, download-and-run, credential reads, unrestricted shell, arguments in shell, prompt injection, bypassed permissions), or something Claude Code won't load, won't run or ignores.
-- **Warnings**: what works but goes against the documentation's advice (descriptions that don't say when to use the component, bodies over 500 lines, broken links, agents with every tool, names that aren't kebab-case).
+- **`groma check <path>`** finds each component of a plugin, a marketplace, a `.claude` directory or a single file where Claude Code looks for it, including the plugin itself through its manifest, and checks it. The report lists every component with its warnings, and ends with the red flags:
+  - **Red flags**: a security risk (hidden Unicode, download-and-run, credential reads, unrestricted shell, arguments in shell, prompt injection, bypassed permissions), or something Claude Code won't load, won't run or ignores.
+  - **Warnings**: what works but goes against the documentation's advice (descriptions that don't say when to use the component, bodies over 500 lines, broken links, agents with every tool, emphatic wording).
 
-It exits with 1 on a red flag, so CI can block a release on them while warnings stay advice.
+  It exits with 1 on a red flag, so CI can block a release on them while warnings stay advice.
+- **`groma fix <path>`** corrects what a rule can correct on its own, shows the diff and asks before writing. Safe fixes change nothing where a component works today; `--unsafe` adds the ones that change what runs, when, or with which tools.
+- **`.groma.yml`** turns rules off, everywhere or for some paths, and a `# groma:disable <rule>` comment does it for one component, for a team whose conventions differ from a rule on purpose.
 
 ## Design choices
 
 - **One binary, no runtime to install.** Written in Go with the standard library only, distributed as static binaries with checksums.
-- **No configuration needed.** It works with none.
+- **No configuration needed.** It works with none; `.groma.yml` only turns rules off.
 - **No account, no cloud, no telemetry.** Nothing leaves the machine.
 - **Rules are code and fixtures.** Each rule is an isolated file with an example it flags, a near-miss it passes, its known false positives and the documentation it enforces, so anyone can read why a finding fired.
+- **Fixes never write unseen.** `groma fix` shows every change and waits for a yes; without a terminal to ask in, it writes nothing.
+
+## How groma got here
+
+groma started as a security scanner for self-hosted agents: `groma expose` for what an always-on agent exposes on a VPS, then `groma scan` for what a plugin could do, then `groma bench`, which measured how precisely Claude routes work to each agent of a plugin by running its eval suite. Using them on real plugins showed that most of what goes wrong is how the components are written, silently, and that no tool held them against Claude Code's own documentation. groma became that tool: `check`, then `fix`.
+
+What was set aside is kept, not deleted: `scan` and `bench` on the branch `scan-and-bench`, the first `expose` slice on `expose-agent-port-public`. `scan`'s four security rules live on in `check`.
 
 ## Roadmap
 
-**v1: `groma check` for Claude Code plugins**
+**Done**
 
-1. A plugin, marketplace, `.claude` directory or file given as a path, with exit codes a CI job can use.
-2. Machine-readable output: JSON, then SARIF for GitHub code scanning.
-3. The frontmatter hooks of skills and agents, and `.mcp.json` servers.
+- `groma check`: 77 rules over plugins, skills, agents, commands and hooks.
+- `groma fix`, safe and `--unsafe`, with diff and confirmation.
+- `.groma.yml` and `groma:disable` comments.
 
-**Next, if it proves useful**
+**Next**
 
-4. Everything installed on the machine, from `~/.claude`.
-5. Bringing back `groma scan`'s broader security checks and `groma bench`'s routing benchmark, set aside on the branch `scan-and-bench`.
+1. Machine-readable output, JSON then SARIF, and a GitHub Action, so findings show on pull requests.
+2. Published binaries with checksums, and a Homebrew tap.
+3. More of what plugins ship: the hooks of skills' and agents' frontmatter, `.mcp.json` servers, the permissions of settings files.
+4. `groma check` with no path, for everything Claude Code loads on the machine.
+5. A scheduled job that compares groma's list of Claude Code fields, tools and events with the documentation, so the rules follow each release.
 
-**Not planned:** a web UI, a hosted service, Windows support, automatic fixes without confirmation.
+**Later, if it proves useful:** bringing back `bench` to measure what a rule claims, such as whether plain descriptions route as well as emphatic ones.
+
+**Not planned:** a web UI, a hosted service, Windows support, fixes applied without confirmation.
 
 ## Honest limits
 

@@ -241,4 +241,10 @@ Every rule cites its source, the Claude Code documentation or Anthropic guidance
 | `hook-agent-experimental` | An agent hook, which Claude Code marks experimental |
 | `hook-timeout-in-milliseconds` | A timeout over an hour, likely meant in milliseconds |
 
+## Status and roadmap
+
+groma is young and moves fast; no release is published yet. It started as a security scanner for AI agents, with `scan`, `expose` and a routing benchmark, `bench`, and turned into a linter for Claude Code plugins once real plugins showed that most problems are in how their components are written. The earlier commands are kept on the branches `scan-and-bench` and `expose-agent-port-public`, and `scan`'s security rules live on in `check`.
+
+Next: JSON and SARIF output with a GitHub Action, published binaries, checks for `.mcp.json` servers and settings permissions, and `groma check` on everything Claude Code loads. The full roadmap and the reasons behind it are in [docs/VISION.md](docs/VISION.md).
+
 groma is a safety net, not a guarantee. It checks against what Claude Code's documentation says today, so a field or tool added by a newer release may show up as unknown until groma learns it; and a clean report means no known mistake was found, not that a plugin is safe.
