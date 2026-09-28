@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "BeforeCommit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo checked"
+          }
+        ]
+      }
+    ]
+  }
+}

