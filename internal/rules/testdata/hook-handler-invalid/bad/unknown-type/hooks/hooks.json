@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "script",
+            "command": "echo done"
+          }
+        ]
+      }
+    ]
+  }
+}

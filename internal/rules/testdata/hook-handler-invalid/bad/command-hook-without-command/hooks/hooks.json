@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "args": [
+              "done"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

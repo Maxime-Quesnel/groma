@@ -1,94 +1,146 @@
 package report
 
 import (
-	"cmp"
 	"fmt"
 	"io"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
+	"github.com/Maxime-Quesnel/groma/internal/component"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 	"github.com/Maxime-Quesnel/groma/internal/style"
 )
 
 const (
-	indent      = "           "
+	indent      = "      "
 	maxEvidence = 5
 	wrapAt      = 100
 )
 
-func Text(w io.Writer, findings []rule.Finding) {
+// Text writes a check: one line per component, with its warnings under it,
+// then every red flag, then a summary line.
+func Text(w io.Writer, target string, components []*component.Component, findings []rule.Finding) {
 	st := style.For(w)
-	sorted := slices.Clone(findings)
-	slices.SortStableFunc(sorted, func(a, b rule.Finding) int {
-		return cmp.Or(cmp.Compare(b.Rule.Severity, a.Rule.Severity), strings.Compare(a.Rule.ID, b.Rule.ID))
-	})
-
-	for _, f := range sorted {
-		fmt.Fprintf(w, "%s %s\n", label(st, f.Rule.Severity), st.Bold(f.Rule.Title))
-		where := st.Dim(f.Rule.ID)
-		if f.Subject != "" {
-			where = escape(f.Subject) + st.Dim(" · "+f.Rule.ID)
-		}
-		fmt.Fprintf(w, "%s%s\n", indent, where)
-		for _, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
-			fmt.Fprintf(w, "%s%s %s\n", indent, st.Dim("›"), escape(mask(e)))
-		}
-		if extra := len(f.Evidence) - maxEvidence; extra > 0 {
-			fmt.Fprintf(w, "%s%s\n", indent, st.Dim(fmt.Sprintf("› and %d more", extra)))
-		}
-		for i, line := range wrap("Fix: "+f.Fix(), wrapAt-len(indent)) {
-			if i == 0 {
-				line = st.Cyan("Fix:") + strings.TrimPrefix(line, "Fix:")
-			}
-			fmt.Fprintf(w, "%s%s\n", indent, line)
-		}
-		fmt.Fprintln(w)
-	}
-	fmt.Fprintln(w, summary(st, findings))
-}
-
-// label is the severity column: the name padded to one width, then colored,
-// so that titles line up.
-func label(st style.Style, s rule.Severity) string {
-	text := fmt.Sprintf(" %-8s ", strings.ToUpper(s.String()))
-	switch s {
-	case rule.Critical:
-		return st.Badge(text)
-	case rule.High:
-		return st.BoldRed(text)
-	case rule.Medium:
-		return st.Yellow(text)
-	}
-	return st.Blue(text)
-}
-
-func summary(st style.Style, findings []rule.Finding) string {
-	if len(findings) == 0 {
-		return st.Green("✔ No findings.")
-	}
-	bySeverity := map[rule.Severity]int{}
+	byPath := map[string][]rule.Finding{}
 	for _, f := range findings {
-		bySeverity[f.Rule.Severity]++
+		byPath[f.Path] = append(byPath[f.Path], f)
 	}
-	parts := []string{st.BoldRed(fmt.Sprintf("✖ %d %s", len(findings), plural(len(findings), "finding")))}
-	for s := rule.Critical; s >= rule.Low; s-- {
-		if n := bySeverity[s]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, s))
+	fmt.Fprintf(w, "%s\n\n", st.Dim(fmt.Sprintf("Checking %s · %s", target, inventory(components))))
+
+	width := 0
+	for _, c := range components {
+		width = max(width, utf8.RuneCountInString(escape(c.Path)))
+	}
+	var redFlags []rule.Finding
+	for _, c := range components {
+		red, warnings := split(byPath[c.Path])
+		redFlags = append(redFlags, red...)
+		mark, counts := st.Green("✔"), ""
+		switch {
+		case len(red) > 0:
+			mark = st.BoldRed("✖")
+			counts = st.Red(count(len(red), "red flag") + " ↓")
+			if len(warnings) > 0 {
+				counts += st.Dim(" · ") + st.Yellow(count(len(warnings), "warning"))
+			}
+		case len(warnings) > 0:
+			mark = st.Yellow("▲")
+			counts = st.Yellow(count(len(warnings), "warning"))
+		}
+		line := fmt.Sprintf("  %s %s %s", mark, style.Pad(c.Kind.String(), 7, st.Dim), style.Pad(escape(c.Path), width, noStyle))
+		fmt.Fprintln(w, strings.TrimRight(line+"  "+counts, " "))
+		for _, f := range warnings {
+			block(w, st, f)
 		}
 	}
-	return strings.Join(parts, st.Dim(" · "))
+
+	if len(redFlags) > 0 {
+		fmt.Fprintf(w, "\n%s\n", st.BoldRed("Red flags"))
+		shown := ""
+		for _, f := range redFlags {
+			if f.Path != shown {
+				fmt.Fprintf(w, "  %s %s\n", st.BoldRed("✖"), escape(f.Path))
+				shown = f.Path
+			}
+			block(w, st, f)
+		}
+	}
+	fmt.Fprintf(w, "\n%s\n", summary(st, len(components), findings))
 }
 
-func plural(n int, noun string) string {
-	if n == 1 {
-		return noun
+func block(w io.Writer, st style.Style, f rule.Finding) {
+	fmt.Fprintf(w, "%s%s %s\n", indent, st.Bold(f.Rule.Title), st.Dim("· "+f.Rule.ID))
+	for _, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
+		fmt.Fprintf(w, "%s%s %s\n", indent, st.Dim("›"), escape(mask(e)))
 	}
-	return noun + "s"
+	if extra := len(f.Evidence) - maxEvidence; extra > 0 {
+		fmt.Fprintf(w, "%s%s\n", indent, st.Dim(fmt.Sprintf("› and %d more", extra)))
+	}
+	for i, line := range wrap("Fix: "+f.Rule.Remediation, wrapAt-len(indent)) {
+		if i == 0 {
+			line = st.Cyan("Fix:") + strings.TrimPrefix(line, "Fix:")
+		}
+		fmt.Fprintf(w, "%s%s\n", indent, line)
+	}
 }
+
+func split(findings []rule.Finding) (red, warnings []rule.Finding) {
+	for _, f := range findings {
+		if f.Rule.Level == rule.RedFlag {
+			red = append(red, f)
+		} else {
+			warnings = append(warnings, f)
+		}
+	}
+	return red, warnings
+}
+
+// inventory counts the components by kind: 3 skills, 1 agent, 1 hooks file.
+func inventory(components []*component.Component) string {
+	counts := map[component.Kind]int{}
+	for _, c := range components {
+		counts[c.Kind]++
+	}
+	var parts []string
+	for _, k := range []component.Kind{component.Skill, component.Agent, component.Command, component.Hooks} {
+		if n := counts[k]; n > 0 {
+			noun := k.String()
+			if k == component.Hooks {
+				noun = "hooks file"
+			}
+			parts = append(parts, count(n, noun))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func summary(st style.Style, components int, findings []rule.Finding) string {
+	red, warnings := split(findings)
+	checked := count(components, "component")
+	switch {
+	case len(red) > 0:
+		line := st.BoldRed("✖ " + count(len(red), "red flag"))
+		if len(warnings) > 0 {
+			line += st.Dim(" · ") + st.Yellow(count(len(warnings), "warning"))
+		}
+		return line + st.Dim(" in "+checked)
+	case len(warnings) > 0:
+		return st.Yellow("▲ "+count(len(warnings), "warning")) + st.Dim(" in "+checked+", no red flags")
+	}
+	return st.Green("✔ No red flags or warnings in " + checked + ".")
+}
+
+func count(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func noStyle(s string) string { return s }
 
 // wrap breaks text into lines of at most width runes, at spaces.
 func wrap(text string, width int) []string {
@@ -107,7 +159,7 @@ func wrap(text string, width int) []string {
 	return append(lines, line)
 }
 
-// Evidence quotes commands and lines from the files being audited, which can
+// Evidence quotes commands and lines from the files being checked, which can
 // carry credentials. These are the common shapes: an Authorization header,
 // user:password in a URL, a token in a query string, well-known key prefixes.
 var secretShapes = []*regexp.Regexp{
@@ -124,7 +176,7 @@ func mask(s string) string {
 	return s
 }
 
-// Subjects and evidence come from the files being audited, so anything a
+// Paths and evidence come from the files being checked, so anything a
 // terminal wouldn't print as-is is spelled out, and a crafted file name or
 // content can't send control sequences to the terminal.
 func escape(s string) string {
