@@ -256,3 +256,35 @@ func TestTimedOutRunsWithoutDispatchDecideNothing(t *testing.T) {
 		t.Errorf("got %+v", sc)
 	}
 }
+
+func TestTextPutsTheCasesThatWentWrongFirst(t *testing.T) {
+	s := Suite{Plugin: "shop", Agents: []string{"shop:rails", "shop:ruby"}, Cases: []Case{
+		{Name: "a-fine-case", Scenario: "a", Expect: []string{"shop:rails"}},
+		{Name: "b-broken-case", Scenario: "b", Expect: []string{"shop:rails"}},
+	}}
+	runs := []Run{
+		{Case: "a-fine-case", Dispatched: []string{"shop:rails"}},
+		{Case: "b-broken-case", Dispatched: []string{"shop:ruby"}},
+		{Case: "b-broken-case", Dispatched: []string{"shop:rails"}},
+		{Case: "b-broken-case", TimedOut: true, Failed: true},
+	}
+	var out strings.Builder
+
+	Text(&out, s, Result{}, "sonnet", runs, ScoreAgents(s, []string{"shop:rails"}, runs))
+
+	report := out.String()
+	for _, want := range []string{
+		"│ rails │ 100%  ",
+		"│ 67%  ",
+		"› rails was missed in 1 run: Claude picked ruby ×1",
+		"│ b-broken-case │ rails   │ ✖ 1/2 │ ruby ×1, timed out ×1 │",
+		"│ a-fine-case   │ rails   │ ✔ 1/1 │ —                     │",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report lacks %q:\n%s", want, report)
+		}
+	}
+	if strings.Index(report, "b-broken-case") > strings.Index(report, "a-fine-case") {
+		t.Errorf("the broken case should come first:\n%s", report)
+	}
+}

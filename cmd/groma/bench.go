@@ -195,15 +195,15 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 		return strings.Join(out, ", ")
 	}
 	scenarios := map[string]bool{}
-	for _, c := range cases {
+	rows := make([][]style.Cell, len(cases))
+	for i, c := range cases {
 		scenarios[c.Scenario] = true
+		expects, forbids := cmp.Or(short(c.Expect), "no agent"), cmp.Or(short(c.Avoid), "—")
+		rows[i] = []style.Cell{style.Plain(c.Name), {Text: expects, Styled: st.Green(expects)}, {Text: forbids, Styled: st.Red(forbids)}}
 	}
-	fmt.Fprintf(w, "%s  %s\n\n", st.Bold("groma bench · "+s.Plugin),
+	fmt.Fprintf(w, "%s  %s\n", st.Bold("groma bench · "+s.Plugin),
 		st.Dim(fmt.Sprintf("%s in %s · %s each · %s", count(len(cases), "case"), count(len(scenarios), "scenario"), count(runs, "run"), count(len(cases)*runs, "run"))))
-	fmt.Fprintln(w, st.Dim(fmt.Sprintf("%-52s %-28s %s", "CASE", "EXPECTS", "FORBIDS")))
-	for _, c := range cases {
-		fmt.Fprintf(w, "%-52s %s %s\n", c.Name, style.Pad(cmp.Or(short(c.Expect), "no agent"), 28, st.Green), st.Red(short(c.Avoid)))
-	}
+	st.Table(w, []string{"Case", "Expects", "Forbids"}, rows)
 	var uncovered []string
 	for _, a := range agents {
 		if !slices.ContainsFunc(s.Cases, func(c bench.Case) bool { return slices.Contains(c.Expect, a) }) {
@@ -211,7 +211,7 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 		}
 	}
 	if len(uncovered) > 0 {
-		fmt.Fprintf(w, "\n%s\n", st.Yellow("⚠ No case expects "+short(uncovered)+", so recall can't be measured for it."))
+		fmt.Fprintln(w, st.Yellow("⚠ No case expects "+short(uncovered)+", so recall can't be measured for it."))
 	}
 	fmt.Fprintln(w)
 }
