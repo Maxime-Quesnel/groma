@@ -44,7 +44,8 @@ Set aside, not merged: `groma scan` and `groma bench` live on the branch `scan-a
 
 ## Stack
 
-- **Go**, latest stable release, pinned in `go.mod`. Static binaries (`CGO_ENABLED=0`) for linux and darwin, amd64 and arm64, published on GitHub Releases with SHA-256 checksums.
+- **Go**, latest stable release, pinned in `go.mod`. Static binaries (`CGO_ENABLED=0`) for linux and darwin, amd64 and arm64, published on GitHub Releases with SHA-256 checksums and build provenance by `.github/workflows/release.yml` when a `v*` tag is pushed; the tag's section of `CHANGELOG.md` becomes the release notes.
+- **CI** (`.github/workflows/ci.yml`) runs gofmt, vet, the tests and `groma check` on groma's own skill. Actions are pinned by commit SHA.
 - **Standard library only.** A third-party module needs a strong justification: a checking tool asks for trust, and each dependency widens its supply chain. The frontmatter parser is groma's own for that reason.
 - **Tests:** `go test ./...`, table-driven, fixtures in each package's `testdata/`. Tests never open a socket or call a network service.
 - **Before a change is done:** `gofmt -l .` prints nothing and `go vet ./...` passes.

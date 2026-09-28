@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/Maxime-Quesnel/groma/internal/component"
@@ -29,6 +30,18 @@ func printUsage(w io.Writer) {
 	command("  --unsafe", "also fixes what changes what runs, when, or with which tools")
 	fmt.Fprintf(w, "\n%s  turn rules off in %s or with a %s comment\n", st.Bold("Config"), st.Cyan(".groma.yml"), st.Cyan("# groma:disable <rule>"))
 	fmt.Fprintf(w, "%s  0 no red flags %s 1 red flags %s 2 error\n", st.Bold("Exit status"), st.Dim("·"), st.Dim("·"))
+	fmt.Fprintf(w, "%s  groma --version\n", st.Bold("Version"))
+}
+
+// version is set by the release build; a go install build reads it from the
+// module instead.
+var version = "dev"
+
+func currentVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok && version == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
 }
 
 func main() {
@@ -47,6 +60,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runFix(args[1:], stdin, stdout, stderr)
 	case "help", "-h", "--help":
 		printUsage(stdout)
+		return 0
+	case "version", "--version":
+		fmt.Fprintln(stdout, "groma "+currentVersion())
 		return 0
 	}
 	fmt.Fprintf(stderr, "groma: unknown command %q\n\n", args[0])

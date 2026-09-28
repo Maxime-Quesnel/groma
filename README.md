@@ -19,24 +19,31 @@ A Claude Code plugin is a handful of Markdown and JSON files, and Claude Code fo
 
 ## Install
 
-groma is a single binary with no runtime dependency, for macOS and Linux. No release is published yet, so install it from source with [Go](https://go.dev/dl/) 1.27 or later:
+groma is a single static binary with no runtime dependency, for macOS and Linux, on amd64 and arm64. Download it from the [releases](https://github.com/Maxime-Quesnel/groma/releases), check it against the published checksums, and put it on your `PATH`:
+
+```sh
+version=0.1.0
+target=darwin_arm64  # or darwin_amd64, linux_amd64, linux_arm64
+base=https://github.com/Maxime-Quesnel/groma/releases/download/v$version
+
+curl -fsSLO "$base/groma_${version}_$target.tar.gz"
+curl -fsSLO "$base/checksums.txt"
+shasum -a 256 --check --ignore-missing checksums.txt
+tar -xzf "groma_${version}_$target.tar.gz"
+mkdir -p ~/.local/bin && mv "groma_${version}_$target/groma" ~/.local/bin/
+groma --version
+```
+
+Each archive carries a build provenance attestation, which proves it was built by this repository's release workflow from the tagged source. With the GitHub CLI:
+
+```sh
+gh attestation verify "groma_${version}_$target.tar.gz" --repo Maxime-Quesnel/groma
+```
+
+Or build it from source with [Go](https://go.dev/dl/) 1.27 or later:
 
 ```sh
 go install github.com/Maxime-Quesnel/groma/cmd/groma@latest
-```
-
-The binary lands in `$(go env GOPATH)/bin`, usually `~/go/bin`. Add that directory to your `PATH` if it isn't there yet:
-
-```sh
-export PATH="$PATH:$(go env GOPATH)/bin"
-```
-
-Or build it from a clone:
-
-```sh
-git clone https://github.com/Maxime-Quesnel/groma.git
-cd groma
-go build -o groma ./cmd/groma
 ```
 
 ## Usage
@@ -243,8 +250,12 @@ Every rule cites its source, the Claude Code documentation or Anthropic guidance
 
 ## Status and roadmap
 
-groma is young and moves fast; no release is published yet. It started as a security scanner for AI agents, with `scan`, `expose` and a routing benchmark, `bench`, and turned into a linter for Claude Code plugins once real plugins showed that most problems are in how their components are written. The earlier commands are kept on the branches `scan-and-bench` and `expose-agent-port-public`, and `scan`'s security rules live on in `check`.
+groma is young and moves fast: v0.1.0 is its first release, and its rules follow Claude Code's documentation as it changes. It started as a security scanner for AI agents, with `scan`, `expose` and a routing benchmark, `bench`, and turned into a linter for Claude Code plugins once real plugins showed that most problems are in how their components are written. The earlier commands are kept on the branches `scan-and-bench` and `expose-agent-port-public`, and `scan`'s security rules live on in `check`.
 
-Next: JSON and SARIF output with a GitHub Action, published binaries, checks for `.mcp.json` servers and settings permissions, and `groma check` on everything Claude Code loads. The full roadmap and the reasons behind it are in [docs/VISION.md](docs/VISION.md).
+Next: JSON and SARIF output with a GitHub Action, a Homebrew tap, checks for `.mcp.json` servers and settings permissions, and `groma check` on everything Claude Code loads. The full roadmap and the reasons behind it are in [docs/VISION.md](docs/VISION.md).
 
 groma is a safety net, not a guarantee. It checks against what Claude Code's documentation says today, so a field or tool added by a newer release may show up as unknown until groma learns it; and a clean report means no known mistake was found, not that a plugin is safe.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
