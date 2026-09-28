@@ -72,7 +72,78 @@ Red flags
 ✖ 1 red flag · 1 warning in 7 components
 ```
 
-groma exits with 0 when it finds no red flag, 1 when it finds at least one, and 2 on error, so a CI job can fail on red flags while warnings stay advice. It only reads: it never modifies a file, never runs the code it inspects, and sends nothing over the network. Secrets quoted in evidence, such as tokens in a hook command, are masked.
+groma exits with 0 when it finds no red flag, 1 when it finds at least one, and 2 on error, so a CI job can fail on red flags while warnings stay advice. `check` only reads: it never modifies a file, never runs the code it inspects, and sends nothing over the network. Secrets quoted in evidence, such as tokens in a hook command, are masked.
+
+## Fix what can be fixed
+
+Like RuboCop's autocorrect, `groma fix` corrects what a rule can correct on its own. It shows the diff, then asks before writing anything, and writes nothing when it can't ask, such as in CI:
+
+```sh
+groma fix ./my-plugin
+groma fix --unsafe ./my-plugin
+```
+
+```diff
+--- a/plugins/my-plugin/hooks/hooks.json
++++ b/plugins/my-plugin/hooks/hooks.json
+@@ -12,7 +12,7 @@
+         ]
+       },
+       {
+-        "matcher": "Edit|Write|MultiEdit",
++        "matcher": "Edit|Write",
+         "hooks": [
+           {
+             "type": "command",
+
+4 fixes in 2 files: hook-matcher-dead-alternative 3, reference-no-toc 1
+31 more fixes change what runs, when, or with which tools: review with groma fix --unsafe
+Apply these changes? [y/N]
+```
+
+Edits change the files' text in place, so their layout, comments and quoting stay as they are.
+
+- **Safe fixes** change nothing where the component works today: they remove what Claude Code ignores, make a command robust, or add a table of contents.
+  - `hook-matcher-dead-alternative`: drops `MultiEdit` and other removed tools from matchers
+  - `unknown-tool`: drops a removed tool whose replacement is already listed
+  - `tool-unavailable-to-agents`: drops `AskUserQuestion` and the like from an agent's tools
+  - `unquoted-path`: quotes `${CLAUDE_PLUGIN_ROOT}` paths in shell commands
+  - `reference-no-toc`: opens a long reference file with a Contents list of its sections
+- **Unsafe fixes**, with `--unsafe`, change what runs, when, or with which tools, so review them:
+  - `field-typo`: renames `allowed_tools` to `allowed-tools`, and the like
+  - `unknown-tool`: replaces a removed tool, or corrects a tool name's case
+  - `hook-never-runs`: corrects a matcher or `if` that never matches, such as `bash` or `MultiEdit(…)`
+  - `hook-matcher-dead-alternative`: corrects a tool name's case in a matcher
+  - `variable-not-substituted`: writes `$CLAUDE_PLUGIN_ROOT/` as `${CLAUDE_PLUGIN_ROOT}/`
+  - `missing-script`: makes a script a hook runs directly executable
+  - `side-effects-model-invocable`: adds `disable-model-invocation: true`
+  - `description-emphatic`: rewrites MUST BE USED as Use proactively, and other capitals in lowercase
+  - `hook-timeout-in-milliseconds`: reads a timeout over an hour as milliseconds
+
+## Turn rules off
+
+Like `.rubocop.yml`, a `.groma.yml` in the checked directory or any directory above it turns rules off, everywhere or for some paths. Paths are globs relative to the file, where `**` matches any number of directories:
+
+```yaml
+disable:
+  - description-emphatic
+exclude:
+  - plugins/legacy/**
+reference-no-toc:
+  - plugins/my-plugin/skills/big-reference/**
+```
+
+A skill, agent or command can also turn rules off for itself, with a comment in its frontmatter, which Claude never reads:
+
+```yaml
+---
+name: rails-expert
+# groma:disable description-emphatic
+description: MUST BE USED for Rails changes.
+---
+```
+
+The report counts what the configuration silenced, so nothing disappears unnoticed. A rule ID groma doesn't know is an error.
 
 ## What it checks
 

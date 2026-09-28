@@ -6,6 +6,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -34,6 +35,17 @@ var sideEffectsModelInvocable = Rule{
 		}
 		return nil
 	},
+	Fix: fixManualOnly,
 }
 
 var sideEffects = []string{"deploy", "release", "publish", "ship", "push", "delete", "destroy", "drop", "migrate", "rollback", "purge", "wipe"}
+
+// fixManualOnly adds disable-model-invocation: true, so only the user starts
+// the workflow. Claude then can't, so the fix is unsafe.
+func fixManualOnly(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	if !unsafe || !c.Header.Found || c.Header.Has("disable-model-invocation") {
+		return nil
+	}
+	at, _ := lineRange(c.Content, c.Header.BodyLine-1, c.Header.BodyLine-1)
+	return []fix.Edit{{Path: c.Path, Start: at, End: at, New: "disable-model-invocation: true\n"}}
+}

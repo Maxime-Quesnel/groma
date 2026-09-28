@@ -5,6 +5,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -42,4 +43,16 @@ var toolUnavailableToAgents = Rule{
 		}
 		return evidence
 	},
+	Fix: fixUnavailableTools,
+}
+
+// fixUnavailableTools removes from an agent's tools the ones Claude Code
+// never gives it, which changes nothing.
+func fixUnavailableTools(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	return listFix(c, "tools", func(entry string, all []string) (string, bool) {
+		name := claudecode.Tool(entry)
+		unavailable := slices.Contains(claudecode.UnavailableToSubagents, name) ||
+			name == "ExitPlanMode" && c.Header.Value("permissionMode") != "plan"
+		return "", unavailable
+	})
 }

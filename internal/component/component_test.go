@@ -177,3 +177,19 @@ func TestInlineShell(t *testing.T) {
 		t.Errorf("got %+v", got)
 	}
 }
+
+func TestDisabledReadsCommentsInTheHeaderAndBody(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"agents/rails.md": "---\nname: rails\n# groma:disable description-emphatic, agent-no-output-format\ndescription: MUST BE USED for Rails.\n---\n\nYou fix Rails.\n<!-- groma:disable reference-no-toc -->\n",
+	})
+	tree, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := tree.Components[0].Disabled()
+
+	if !reflect.DeepEqual(got, []string{"description-emphatic", "agent-no-output-format", "reference-no-toc"}) {
+		t.Errorf("got %q", got)
+	}
+}

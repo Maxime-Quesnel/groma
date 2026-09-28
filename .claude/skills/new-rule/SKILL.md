@@ -46,7 +46,17 @@ When in doubt, it's a warning. A red flag makes CI fail.
 - Rules that read frontmatter fields return nothing when `!headerReadable(c)`: `frontmatter-unreadable` already reports it.
 - Quote what you found, clipped with `clip`. Evidence can hold secrets from the files checked: the report masks the common shapes, but never build evidence that spells a secret out on purpose.
 
-## 6. Write the fixtures
+## 6. Add a fix, if the correction is mechanical
+
+When the right correction follows from the problem alone, give the rule a `Fix(c, t, unsafe)` returning `fix.Edit`s on the file's text: `listFix` edits a frontmatter list, `jsonValueEdits` a hooks file value, `replaceInLine` one line.
+
+- A **safe** edit changes nothing where the component works today: it removes what Claude Code ignores, makes a command robust, or adds navigation. Return it whatever `unsafe` is.
+- An **unsafe** edit changes what runs, when, or with which tools, or guesses the author's intent. Return it only when `unsafe` is set.
+- When the correction needs a choice, such as rewording a description or moving a file, add no fix.
+
+`TestFixes` applies every fix to the rule's bad fixtures and checks that the evidence never grows, that at least one fixture is fully fixed, that no file breaks, and that good fixtures get no edit. List the fix in the README's fix section.
+
+## 7. Write the fixtures
 
 - Under `bad/`, at least one case the rule must flag; under `good/`, at least one near-miss it must pass, as close to the bad case as possible: it is what keeps false positives down.
 - A case is a directory laid out like a real plugin (`skills/pdf/SKILL.md`, `agents/reviewer.md`, `hooks/hooks.json`), or a single file. It must hold a component of a kind the rule checks.
@@ -55,7 +65,7 @@ When in doubt, it's a warning. A red flag makes CI fail.
 - Fake secrets only: provider-documented examples (`AKIAIOSFODNN7EXAMPLE`) or strings assembled at test time. Never a real key, even a revoked one.
 - File modes matter to some rules, such as `missing-script`: set them with `chmod` before `git add`.
 
-## 7. Test
+## 8. Test
 
 `TestRules` runs every registered rule on its fixtures: each `bad/` case must yield evidence, each `good/` case none, and the metadata must be complete. Then run it on real plugins, such as `~/.claude/plugins/marketplaces/*`, and read every finding: a rule that misfires on well-written plugins isn't done.
 
@@ -68,7 +78,7 @@ go build -o /tmp/groma ./cmd/groma && /tmp/groma check ~/.claude/plugins/marketp
 
 `gofmt -l .` must print nothing.
 
-## 8. Before calling it done
+## 9. Before calling it done
 
 - [ ] The rule cites the documentation it enforces.
 - [ ] Claude Code's vocabulary it uses lives in `internal/claudecode`.

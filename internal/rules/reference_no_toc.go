@@ -8,6 +8,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -40,6 +41,7 @@ var referenceNoToc = Rule{
 		}
 		return evidence
 	},
+	Fix: fixReferenceToc,
 }
 
 var (
@@ -61,4 +63,38 @@ func hasToc(lines []string) bool {
 		}
 	}
 	return anchors >= 3
+}
+
+// fixReferenceToc opens each long reference file with a Contents list of its
+// sections, after its title.
+func fixReferenceToc(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	var edits []fix.Edit
+	for _, f := range markdownFiles(c, t) {
+		lines := strings.Split(string(f.Content), "\n")
+		if f.Path == c.Path || path.Ext(f.Path) != ".md" || len(lines) <= tocAfter || hasToc(lines) {
+			continue
+		}
+		var sections []string
+		fenced := false
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "```") {
+				fenced = !fenced
+			}
+			if title, ok := strings.CutPrefix(line, "## "); ok && !fenced {
+				sections = append(sections, "- "+strings.TrimSpace(title))
+			}
+		}
+		if len(sections) < 2 {
+			continue
+		}
+		at := 0
+		if strings.HasPrefix(lines[0], "# ") {
+			at = len(lines[0]) + 1
+			if len(lines) > 1 && strings.TrimSpace(lines[1]) == "" {
+				at += len(lines[1]) + 1
+			}
+		}
+		edits = append(edits, fix.Edit{Path: f.Path, Start: at, End: at, New: "## Contents\n\n" + strings.Join(sections, "\n") + "\n\n"})
+	}
+	return edits
 }
