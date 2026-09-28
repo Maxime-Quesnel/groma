@@ -18,6 +18,8 @@ Problem, audience, positioning and roadmap: [docs/VISION.md](docs/VISION.md).
 
 `groma fix [--unsafe] <path>` corrects what the rules can correct on their own, like RuboCop's autocorrect: it shows the diff, asks, and writes only on a yes, never without a terminal to ask in. Safe fixes change nothing where the component works today; `--unsafe` adds the ones that change what runs, when, or with which tools.
 
+`groma hook` is Claude Code's PostToolUse hook: the groma plugin, in `plugin/` and listed by the marketplace in `.claude-plugin/marketplace.json`, runs it after every Edit and Write. It checks the component the edited file belongs to and answers with a block decision for red flags and context for warnings; it never fails an edit.
+
 `.groma.yml`, in the checked directory or above, turns rules off everywhere (`disable`), for paths (`exclude`), or per rule (`<rule-id>: [globs]`); a `# groma:disable <rule>` comment in a component's frontmatter turns rules off for that component.
 
 Set aside, not merged: `groma scan` and `groma bench` live on the branch `scan-and-bench`, and a first `groma expose` slice on `expose-agent-port-public`.
@@ -63,4 +65,6 @@ internal/rule/         rule metadata, Level, Finding
 internal/rules/        one file per rule, the All registry, testdata/<rule-id>/{bad,good}/
 internal/report/       text report, secret masking, escaping of untrusted text
 internal/style/        terminal colors, only when writing to a terminal and NO_COLOR is unset
+plugin/                the groma Claude Code plugin: the PostToolUse hook and the check skill
+.claude-plugin/        the marketplace that lists the plugin
 ```

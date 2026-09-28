@@ -1,0 +1,18 @@
+{
+  "description": "After Claude edits a file, groma checks the skill, agent, command or hooks file it belongs to, and tells Claude what to fix. Without groma on the PATH, or with a groma older than 0.2.0, the hook does nothing.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v groma >/dev/null 2>&1 && groma hook 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "groma check"
+          }
+        ]
+      }
+    ]
+  }
+}

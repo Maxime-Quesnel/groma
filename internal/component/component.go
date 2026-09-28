@@ -240,7 +240,8 @@ func Load(p string) (*Tree, error) {
 
 // surroundings returns the directory to read around a file, and the part of
 // it to walk: the plugin holding the file, the project holding a .claude
-// file, a skill's directory, or else the file's own directory.
+// file, the directory above the skills/, agents/, commands/ or hooks/
+// directory the file sits in, or else the file's own directory.
 func surroundings(file string) (root, walk string) {
 	dir := filepath.Dir(file)
 	for d := dir; ; d = filepath.Dir(d) {
@@ -252,6 +253,11 @@ func surroundings(file string) (root, walk string) {
 		}
 		if d == filepath.Dir(d) {
 			break
+		}
+	}
+	for d := dir; d != filepath.Dir(d); d = filepath.Dir(d) {
+		if slices.Contains(kindDirs, filepath.Base(d)) {
+			return filepath.Dir(d), "."
 		}
 	}
 	return dir, "."

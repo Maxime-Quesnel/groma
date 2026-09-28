@@ -225,3 +225,34 @@ func Diff(w io.Writer, lines []string) {
 		fmt.Fprintln(w, shown)
 	}
 }
+
+// Feedback writes findings as plain text for Claude, as a hook passes them
+// back: one paragraph per finding, secrets masked, untrusted text escaped.
+func Feedback(path string, findings []rule.Finding) string {
+	red, warnings := split(findings)
+	var b strings.Builder
+	fmt.Fprintf(&b, "groma check found %s in %s, which Claude Code's documentation says to write differently:\n",
+		strings.Join(nonEmpty(count(len(red), "red flag"), len(red), count(len(warnings), "warning"), len(warnings)), " and "), escape(path))
+	for _, f := range append(red, warnings...) {
+		fmt.Fprintf(&b, "\n- %s, %s: %s.", f.Rule.Level, f.Rule.ID, f.Rule.Title)
+		for _, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
+			fmt.Fprintf(&b, " %s.", strings.TrimSuffix(escape(mask(e)), "."))
+		}
+		fmt.Fprintf(&b, " Fix: %s", f.Rule.Remediation)
+	}
+	if len(red) > 0 {
+		b.WriteString("\n\nFix the red flags before moving on; the warnings are advice.")
+	}
+	return b.String()
+}
+
+func nonEmpty(first string, n1 int, second string, n2 int) []string {
+	var parts []string
+	if n1 > 0 {
+		parts = append(parts, first)
+	}
+	if n2 > 0 {
+		parts = append(parts, second)
+	}
+	return parts
+}
