@@ -14,10 +14,10 @@ var stopHookCanLoop = Rule{
 	Meta: rule.Meta{
 		ID:    "stop-hook-can-loop",
 		Level: rule.Warning,
-		Title: "Stop hook that can keep Claude going forever",
+		Title: "Stop hook that can keep Claude going on a condition that never resolves",
 		Description: "A Stop or SubagentStop hook that blocks, with exit 2 or a \"block\" decision, sends Claude back to work. " +
 			"Claude Code sets stop_hook_active in the hook's input when Claude is already continuing because of a Stop hook; " +
-			"a hook that never reads it can block again and again, burning the user's usage until they interrupt.",
+			"a hook that never reads it blocks again on a condition Claude can't meet, up to eight times in a row by default, spending the user's usage each time.",
 		Remediation: "Read stop_hook_active from the hook's JSON input and let Claude stop when it's true.",
 		FalsePositives: []string{
 			"A hook that bounds its retries some other way, such as a counter in a file.",
@@ -32,13 +32,7 @@ var stopHookCanLoop = Rule{
 			if h.Event != "Stop" && h.Event != "SubagentStop" || h.Type != "command" {
 				continue
 			}
-			code := []string{h.Run()}
-			for _, s := range t.Scripts(h.Run(), c.Roots()) {
-				if f, ok := t.File(s.Path); ok {
-					code = append(code, string(f.Content))
-				}
-			}
-			text := strings.Join(code, "\n")
+			text := hookCode(c, t, h)
 			if blocks.MatchString(text) && !strings.Contains(text, "stop_hook_active") {
 				evidence = append(evidence, fmt.Sprintf("%s can block, and never reads stop_hook_active", h.Where()))
 			}

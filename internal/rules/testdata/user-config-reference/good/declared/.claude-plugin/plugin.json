@@ -1,0 +1,16 @@
+{
+  "name": "shop",
+  "userConfig": {
+    "region": {
+      "type": "string",
+      "title": "Region",
+      "description": "Region"
+    },
+    "api_token": {
+      "type": "string",
+      "title": "Token",
+      "description": "API token",
+      "sensitive": true
+    }
+  }
+}

@@ -13,15 +13,15 @@ var descriptionTooLong = Rule{
 		ID:    "description-too-long",
 		Level: rule.Warning,
 		Title: "Description too long",
-		Description: "Descriptions sit in Claude's context in every conversation, next to every other component's. The Agent Skills specification caps them at 1,024 characters, " +
+		Description: "Skill and command descriptions sit in Claude's context in every conversation, next to every other one. The Agent Skills specification caps them at 1,024 characters, " +
 			"and Claude Code cuts a skill's description and when_to_use at 1,536 characters in its listing, so Claude never reads the end.",
 		Remediation: "Say what the component does and when to use it, key use case first, and move the rest into the body.",
 		FalsePositives: []string{
-			"An agent description over 1,024 characters that Claude Code still loads whole: the limit is the skills specification's, applied to agents for the same context cost.",
+			"A session configured with a larger skillListingMaxDescChars, which raises the 1,536-character cut.",
 		},
 		References: []string{claudecode.SkillsDocs, claudecode.BestPractices},
 	},
-	Kinds: markdown,
+	Kinds: skillsAndCommands,
 	Check: func(c *component.Component, t *component.Tree) []string {
 		if !headerReadable(c) {
 			return nil

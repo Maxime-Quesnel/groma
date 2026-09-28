@@ -26,52 +26,89 @@ var All = []Rule{
 	argumentsInShell,
 	promptInjection,
 	bypassPermissions,
+	hookApprovesEveryPermission,
 	// Red flags: what Claude Code won't load, won't run or ignores.
 	frontmatterUnreadable,
 	agentNotLoaded,
+	componentNotLoaded,
+	pluginClaudeMd,
+	reservedName,
+	skillNeverInvocable,
 	fieldTypo,
 	invalidValue,
 	fieldIgnored,
 	unknownTool,
 	toolUnavailableToAgents,
+	toolAllowedAndDenied,
+	disallowedToolSpecifier,
+	permissionPatternNeverMatches,
+	preloadedSkillUnavailable,
 	duplicateName,
+	unknownComponentReference,
+	variableNotSubstituted,
+	userConfigReference,
+	pathEscapesPlugin,
 	shellNotPreapproved,
 	missingScript,
 	hookFileInvalid,
 	hookUnknownEvent,
 	hookHandlerInvalid,
+	hookTypeUnsupported,
 	hookFieldIgnored,
 	hookNeverRuns,
 	hookMatcherIgnored,
+	hookUnscopedPluginName,
 	hookUserConfigInShell,
+	hookAsyncCannotBlock,
+	hookExit1DoesNotBlock,
+	hookOutputIgnored,
+	hookEnvironmentUnavailable,
+	hookRelativeScript,
 	// Warnings.
 	unknownField,
+	fieldWithoutEffect,
 	nameFormat,
+	skillNameMismatch,
+	rootSkillUnnamed,
 	descriptionMissing,
 	descriptionTooLong,
 	descriptionNoTrigger,
 	descriptionVoice,
+	descriptionEmphatic,
+	skillListingBudget,
+	triggerInBody,
 	bodyEmpty,
 	bodyTooLong,
+	bodyAddressedToUser,
+	emphasisOverused,
+	timeSensitiveText,
 	brokenLink,
 	nestedReference,
+	referenceNoToc,
 	nonPortablePath,
 	agentToolsUnrestricted,
+	agentMemoryGrantsWrite,
+	agentPromptVoice,
+	agentNoOutputFormat,
 	argumentHintMissing,
 	sideEffectsModelInvocable,
 	unquotedPath,
 	stopHookCanLoop,
+	hookMatcherDeadAlternative,
+	hookDeprecatedDecision,
+	hookAgentExperimental,
+	hookTimeoutInMilliseconds,
 }
 
 func Check(t *component.Tree) []rule.Finding {
 	var findings []rule.Finding
-	for _, c := range t.Components {
+	for _, c := range t.Targets {
 		for _, r := range All {
 			if !slices.Contains(r.Kinds, c.Kind) {
 				continue
 			}
 			if evidence := r.Check(c, t); len(evidence) > 0 {
-				findings = append(findings, rule.Finding{Rule: r.Meta, Path: c.Path, Evidence: evidence})
+				findings = append(findings, rule.Finding{Rule: r.Meta, Path: c.Path, Kind: c.Kind.String(), Evidence: evidence})
 			}
 		}
 	}
@@ -193,4 +230,39 @@ func distance(a, b string) int {
 		prev = cur
 	}
 	return prev[len(b)]
+}
+
+// hookCode returns what a command hook runs: its command line and the
+// content of the scripts it names.
+func hookCode(c *component.Component, t *component.Tree, h component.Handler) string {
+	code := []string{h.Run()}
+	for _, s := range t.Scripts(h.Run(), c.Roots()) {
+		if f, ok := t.File(s.Path); ok {
+			code = append(code, string(f.Content))
+		}
+	}
+	return strings.Join(code, "\n")
+}
+
+func isTrue(v string) bool {
+	return slices.Contains([]string{"true", "yes", "on", "1"}, strings.ToLower(strings.TrimSpace(v)))
+}
+
+func isFalse(v string) bool {
+	return slices.Contains([]string{"false", "no", "off", "0"}, strings.ToLower(strings.TrimSpace(v)))
+}
+
+// bodyLines calls fn for each line of the component's body outside fenced
+// code blocks, with its line number in the file.
+func bodyLines(c *component.Component, fn func(n int, line string)) {
+	fenced := false
+	for i, line := range strings.Split(c.Header.Body, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			fenced = !fenced
+			continue
+		}
+		if !fenced {
+			fn(c.Header.BodyLine+i, line)
+		}
+	}
 }

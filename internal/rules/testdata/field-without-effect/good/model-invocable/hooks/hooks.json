@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm test",
+            "timeout": 120
+          },
+          {
+            "type": "command",
+            "command": "npm run lint",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

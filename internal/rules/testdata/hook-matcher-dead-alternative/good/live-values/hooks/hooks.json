@@ -1,0 +1,46 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit, Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo checked"
+          }
+        ]
+      },
+      {
+        "matcher": "^Notebook.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo notebook"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo hi"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "code-reviewer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo done"
+          }
+        ]
+      }
+    ]
+  }
+}

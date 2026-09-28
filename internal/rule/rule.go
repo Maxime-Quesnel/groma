@@ -37,8 +37,10 @@ type Meta struct {
 
 type Finding struct {
 	Rule Meta
-	// Path is the file that declares the component.
+	// Path is the file that declares the component, and Kind what the
+	// component is: a manifest declares both a plugin and its hooks.
 	Path string
+	Kind string
 	// Evidence must never hold a secret in clear.
 	Evidence []string
 }

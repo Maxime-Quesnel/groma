@@ -1,0 +1,6 @@
+{
+  "name": "shop",
+  "agents": [
+    "./agents/reviewer.md"
+  ]
+}

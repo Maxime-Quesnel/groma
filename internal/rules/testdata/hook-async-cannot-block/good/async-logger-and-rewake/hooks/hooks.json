@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat >> /tmp/claude-tools.log",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "npm test || exit 2",
+            "asyncRewake": true,
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

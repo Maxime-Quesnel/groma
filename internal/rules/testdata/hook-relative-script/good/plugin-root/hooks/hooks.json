@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/format.sh\""
+          },
+          {
+            "type": "command",
+            "command": "npx prettier --write src/index.ts"
+          }
+        ]
+      }
+    ]
+  }
+}
