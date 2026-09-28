@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Maxime-Quesnel/groma/internal/bench"
+	"github.com/Maxime-Quesnel/groma/internal/style"
 )
 
 const benchUsage = `Usage: groma bench [flags] <plugin>
@@ -153,7 +154,7 @@ func executeBench(cfg benchConfig, stdout, stderr io.Writer) int {
 		return 2
 	}
 	resultPath, _ := filepath.Abs(filepath.Join(work, "result.json"))
-	fmt.Fprintf(stdout, "Running with %s, through your Claude Code plan. Workspace: %s\n\n", cmp.Or(cfg.model, "your Claude Code default model"), work)
+	fmt.Fprintf(stdout, "%s\n\n", style.For(stdout).Dim(fmt.Sprintf("Running on your Claude Code plan with %s · workspace %s", cmp.Or(cfg.model, "your default model"), work)))
 	o := bench.Options{Runs: cfg.runs, Model: cfg.model, JudgeModel: cfg.judge, MaxCostUSD: cfg.maxCost,
 		Concurrency: cfg.concurrency, Scaffold: cfg.scaffold, AllowTools: cfg.allowTools}
 	if err := bench.Eval(context.Background(), copyDir, resultPath, o, stdout, stderr); err != nil {
@@ -185,6 +186,7 @@ func scoreResult(resultPath, reportPath, judge string, suite bench.Suite, agents
 }
 
 func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, runs int) {
+	st := style.For(w)
 	short := func(names []string) string {
 		out := make([]string, len(names))
 		for i, n := range names {
@@ -196,11 +198,11 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 	for _, c := range cases {
 		scenarios[c.Scenario] = true
 	}
-	fmt.Fprintf(w, "%s: %d agents, %d cases in %d scenarios selected, %d runs each: %d runs.\n\n",
-		s.Plugin, len(s.Agents), len(cases), len(scenarios), runs, len(cases)*runs)
-	fmt.Fprintf(w, "%-52s %-28s %s\n", "CASE", "EXPECTS", "FORBIDS")
+	fmt.Fprintf(w, "%s  %s\n\n", st.Bold("groma bench · "+s.Plugin),
+		st.Dim(fmt.Sprintf("%s in %s · %s each · %s", count(len(cases), "case"), count(len(scenarios), "scenario"), count(runs, "run"), count(len(cases)*runs, "run"))))
+	fmt.Fprintln(w, st.Dim(fmt.Sprintf("%-52s %-28s %s", "CASE", "EXPECTS", "FORBIDS")))
 	for _, c := range cases {
-		fmt.Fprintf(w, "%-52s %-28s %s\n", c.Name, cmp.Or(short(c.Expect), "no agent named"), short(c.Avoid))
+		fmt.Fprintf(w, "%-52s %s %s\n", c.Name, style.Pad(cmp.Or(short(c.Expect), "no agent"), 28, st.Green), st.Red(short(c.Avoid)))
 	}
 	var uncovered []string
 	for _, a := range agents {
@@ -209,7 +211,7 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 		}
 	}
 	if len(uncovered) > 0 {
-		fmt.Fprintf(w, "\nNo case expects these agents, so their recall can't be measured: %s\n", short(uncovered))
+		fmt.Fprintf(w, "\n%s\n", st.Yellow("⚠ No case expects "+short(uncovered)+", so recall can't be measured for it."))
 	}
 	fmt.Fprintln(w)
 }

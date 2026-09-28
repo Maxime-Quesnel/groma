@@ -65,6 +65,7 @@ internal/report/         rendering and secret masking
 internal/bench/          routing benchmark over claude plugin eval: ground truth, workspace, scores
 internal/frontmatter/    top-level scalars and lists from Markdown YAML headers
 internal/prompt/         arrow-key select and checkbox prompts over a raw terminal, no dependency
+internal/style/          terminal colors, only when writing to a terminal and NO_COLOR is unset
 ```
 
 `expose` adds `internal/rules/expose/`, neutral agent descriptions in `internal/agent/`, and `internal/host/` (read-only probes, local or over SSH).

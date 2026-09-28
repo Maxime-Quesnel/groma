@@ -15,6 +15,7 @@ import (
 	"github.com/Maxime-Quesnel/groma/internal/agent/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/bench"
 	"github.com/Maxime-Quesnel/groma/internal/prompt"
+	"github.com/Maxime-Quesnel/groma/internal/style"
 )
 
 // secondsPerRun is what a run took on average in the first benchmarks, for
@@ -62,7 +63,8 @@ func runBenchPrompts(stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "groma: %v\n", err)
 		return 2
 	}
-	fmt.Fprintf(stdout, "\nSame run next time, or in CI:\n  %s\n\n", commandLine(cfg, cwd, home))
+	st := style.For(stdout)
+	fmt.Fprintf(stdout, "\n%s\n  %s\n\n", st.Dim("Same run next time, or in CI:"), st.Cyan(commandLine(cfg, cwd, home)))
 	return executeBench(cfg, stdout, stderr)
 }
 
@@ -130,18 +132,28 @@ func count(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
+// askBench asks only what changes from one benchmark to the next: the
+// plugin when there is more than one, the agents, and how thorough to be.
+// The rest takes the defaults the first benchmarks settled on; flags change
+// it, and the command printed afterwards shows them.
 func askBench(term *prompt.Terminal, plugins []pluginChoice) (benchConfig, error) {
-	var cfg benchConfig
-	options := make([]prompt.Option, len(plugins))
-	for i, p := range plugins {
-		options[i] = prompt.Option{Label: strings.TrimSpace(p.suite.Plugin + " " + p.version),
-			Hint: fmt.Sprintf("%s, %s · %s", count(len(p.suite.Agents), "agent"), count(len(p.suite.Cases), "case"), p.where)}
+	cfg := benchConfig{concurrency: 2, judge: "sonnet", allowTools: []string{"Edit", "Write"}}
+	st := style.On()
+	p := plugins[0]
+	if len(plugins) == 1 {
+		term.Done("Plugin", pluginLabel(p))
+	} else {
+		options := make([]prompt.Option, len(plugins))
+		for i, p := range plugins {
+			options[i] = prompt.Option{Label: pluginLabel(p),
+				Hint: fmt.Sprintf("%s, %s · %s", count(len(p.suite.Agents), "agent"), count(len(p.suite.Cases), "case"), p.where)}
+		}
+		i, err := term.Select("Plugin", options, 0)
+		if err != nil {
+			return cfg, err
+		}
+		p = plugins[i]
 	}
-	i, err := term.Select("Which plugin?", options, 0)
-	if err != nil {
-		return cfg, err
-	}
-	p := plugins[i]
 	cfg.pluginDir = p.dir
 
 	agents := make([]prompt.Option, len(p.suite.Agents))
@@ -149,7 +161,7 @@ func askBench(term *prompt.Terminal, plugins []pluginChoice) (benchConfig, error
 		agents[i] = prompt.Option{Label: strings.TrimPrefix(a, p.suite.Plugin+":"), Hint: agentHint(p.suite, a)}
 	}
 	for len(cfg.agents) == 0 {
-		checked, err := term.Check("Which agents should the benchmark score?", agents)
+		checked, err := term.Check("Agents", agents)
 		if err != nil {
 			return cfg, err
 		}
@@ -159,82 +171,42 @@ func askBench(term *prompt.Terminal, plugins []pluginChoice) (benchConfig, error
 			}
 		}
 		if len(cfg.agents) == 0 {
-			term.Say("  Check at least one agent with the space bar.")
+			term.Say("  %s", st.Yellow("Check at least one agent with the space bar."))
 		}
 	}
 	_, cases, err := selection(p.suite, cfg.agents)
 	if err != nil {
 		return cfg, err
 	}
+	cfg.scaffold = slices.ContainsFunc(cases, hasScaffold)
 
-	runs := []int{1, 3, 5, 10}
-	i, err = term.Select("How many runs per case?", []prompt.Option{
-		{Label: "1 run", Hint: "a quick look"},
-		{Label: "3 runs", Hint: "recommended"},
-		{Label: "5 runs", Hint: "tighter intervals"},
-		{Label: "10 runs", Hint: "a baseline to compare against later"},
-	}, 1)
-	if err != nil {
-		return cfg, err
+	depth := func(runs int) string {
+		total := len(cases) * runs
+		return fmt.Sprintf("%s per case · %s · about %s", count(runs, "run"), count(total, "run"), estimate(total, cfg.concurrency))
 	}
-	cfg.runs = runs[i]
-
-	concurrency := []int{1, 2, 4}
-	i, err = term.Select("How many runs at once?", []prompt.Option{
-		{Label: "1 at a time", Hint: "slowest"},
-		{Label: "2 at a time", Hint: "recommended"},
-		{Label: "4 at a time", Hint: "faster, but runs can slow down or time out on your plan's rate limit"},
-	}, 1)
-	if err != nil {
-		return cfg, err
-	}
-	cfg.concurrency = concurrency[i]
-
-	models := []string{"", "sonnet", "opus", "haiku"}
-	i, err = term.Select("Which model should Claude use?", []prompt.Option{
-		{Label: "Your Claude Code default", Hint: "recommended: the model you work with"},
-		{Label: "sonnet"}, {Label: "opus"}, {Label: "haiku"},
-	}, 0)
-	if err != nil {
-		return cfg, err
-	}
-	cfg.model = models[i]
-
-	checked, err := term.Check("Options", []prompt.Option{
-		{Label: "Run the cases' scaffold scripts", Hint: "they set up each case's workspace, and run as you", Checked: slices.ContainsFunc(cases, hasScaffold)},
-		{Label: "Let Claude edit files (Edit, Write)", Hint: "most cases grade the files Claude writes", Checked: true},
-		{Label: "Judge with Sonnet", Hint: "the default judge is small and can refuse right work phrased another way", Checked: true},
-	})
-	if err != nil {
-		return cfg, err
-	}
-	cfg.scaffold = checked[0].Checked
-	if checked[1].Checked {
-		cfg.allowTools = []string{"Edit", "Write"}
-	}
-	if checked[2].Checked {
-		cfg.judge = "sonnet"
-	}
-
-	total := len(cases) * cfg.runs
-	term.Say("  %s · %s × %s = %s · about %s with %d at a time",
-		strings.Join(cfg.agents, ", "), count(len(cases), "case"), count(cfg.runs, "run"), count(total, "run"), estimate(total, cfg.concurrency), cfg.concurrency)
-	term.Say("  Claude runs through your Claude Code login: this counts against your plan.")
-	i, err = term.Select("Start?", []prompt.Option{
-		{Label: "Start"},
-		{Label: "Only show the plan", Hint: "a dry run, free"},
+	term.Say("  %s", st.Dim("Claude runs on your Claude Code plan, with your model. Other settings: groma bench -h"))
+	i, err := term.Select("Run", []prompt.Option{
+		{Label: "Standard", Hint: depth(3)},
+		{Label: "Quick look", Hint: depth(1)},
+		{Label: "Precise", Hint: depth(5)},
+		{Label: "Show the plan only", Hint: "free"},
 		{Label: "Cancel"},
 	}, 0)
 	if err != nil {
 		return cfg, err
 	}
+	cfg.runs = []int{3, 1, 5, 3, 0}[i]
 	switch i {
-	case 1:
+	case 3:
 		cfg.dryRun = true
-	case 2:
+	case 4:
 		return cfg, prompt.ErrCanceled
 	}
 	return cfg, nil
+}
+
+func pluginLabel(p pluginChoice) string {
+	return strings.TrimSpace(p.suite.Plugin + " " + p.version)
 }
 
 func agentHint(s bench.Suite, agent string) string {

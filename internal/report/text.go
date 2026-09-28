@@ -11,55 +11,100 @@ import (
 	"unicode"
 
 	"github.com/Maxime-Quesnel/groma/internal/rule"
+	"github.com/Maxime-Quesnel/groma/internal/style"
 )
 
 const (
-	indent      = "          "
+	indent      = "           "
 	maxEvidence = 5
+	wrapAt      = 100
 )
 
 func Text(w io.Writer, findings []rule.Finding) {
+	st := style.For(w)
 	sorted := slices.Clone(findings)
 	slices.SortStableFunc(sorted, func(a, b rule.Finding) int {
 		return cmp.Or(cmp.Compare(b.Rule.Severity, a.Rule.Severity), strings.Compare(a.Rule.ID, b.Rule.ID))
 	})
 
 	for _, f := range sorted {
-		fmt.Fprintf(w, "%-8s  %s", strings.ToUpper(f.Rule.Severity.String()), f.Rule.ID)
+		fmt.Fprintf(w, "%s %s\n", label(st, f.Rule.Severity), st.Bold(f.Rule.Title))
+		where := st.Dim(f.Rule.ID)
 		if f.Subject != "" {
-			fmt.Fprintf(w, "  %s", escape(f.Subject))
+			where = escape(f.Subject) + st.Dim(" · "+f.Rule.ID)
 		}
-		fmt.Fprintf(w, "\n%s%s\n", indent, f.Rule.Title)
+		fmt.Fprintf(w, "%s%s\n", indent, where)
 		for _, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
-			fmt.Fprintf(w, "%s- %s\n", indent, escape(mask(e)))
+			fmt.Fprintf(w, "%s%s %s\n", indent, st.Dim("›"), escape(mask(e)))
 		}
 		if extra := len(f.Evidence) - maxEvidence; extra > 0 {
-			fmt.Fprintf(w, "%s- and %d more\n", indent, extra)
+			fmt.Fprintf(w, "%s%s\n", indent, st.Dim(fmt.Sprintf("› and %d more", extra)))
 		}
-		fmt.Fprintf(w, "%sfix: %s\n\n", indent, f.Fix())
+		for i, line := range wrap("Fix: "+f.Fix(), wrapAt-len(indent)) {
+			if i == 0 {
+				line = st.Cyan("Fix:") + strings.TrimPrefix(line, "Fix:")
+			}
+			fmt.Fprintf(w, "%s%s\n", indent, line)
+		}
+		fmt.Fprintln(w)
 	}
-	fmt.Fprintln(w, summary(findings))
+	fmt.Fprintln(w, summary(st, findings))
 }
 
-func summary(findings []rule.Finding) string {
+// label is the severity column: the name padded to one width, then colored,
+// so that titles line up.
+func label(st style.Style, s rule.Severity) string {
+	text := fmt.Sprintf(" %-8s ", strings.ToUpper(s.String()))
+	switch s {
+	case rule.Critical:
+		return st.Badge(text)
+	case rule.High:
+		return st.BoldRed(text)
+	case rule.Medium:
+		return st.Yellow(text)
+	}
+	return st.Blue(text)
+}
+
+func summary(st style.Style, findings []rule.Finding) string {
 	if len(findings) == 0 {
-		return "No findings."
+		return st.Green("✔ No findings.")
 	}
 	bySeverity := map[rule.Severity]int{}
 	for _, f := range findings {
 		bySeverity[f.Rule.Severity]++
 	}
-	var counts []string
+	parts := []string{st.BoldRed(fmt.Sprintf("✖ %d %s", len(findings), plural(len(findings), "finding")))}
 	for s := rule.Critical; s >= rule.Low; s-- {
 		if n := bySeverity[s]; n > 0 {
-			counts = append(counts, fmt.Sprintf("%d %s", n, s))
+			parts = append(parts, fmt.Sprintf("%d %s", n, s))
 		}
 	}
-	noun := "findings"
-	if len(findings) == 1 {
-		noun = "finding"
+	return strings.Join(parts, st.Dim(" · "))
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return noun
 	}
-	return fmt.Sprintf("%d %s: %s", len(findings), noun, strings.Join(counts, ", "))
+	return noun + "s"
+}
+
+// wrap breaks text into lines of at most width runes, at spaces.
+func wrap(text string, width int) []string {
+	var lines []string
+	line := ""
+	for _, word := range strings.Fields(text) {
+		if line != "" && len([]rune(line))+1+len([]rune(word)) > width {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line != "" {
+			line += " "
+		}
+		line += word
+	}
+	return append(lines, line)
 }
 
 // Evidence quotes commands and lines from the files being audited, which can
