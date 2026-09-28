@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Maxime-Quesnel/groma/internal/agent/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/bench"
 	"github.com/Maxime-Quesnel/groma/internal/style"
 )
@@ -154,7 +155,13 @@ func executeBench(cfg benchConfig, stdout, stderr io.Writer) int {
 		return 2
 	}
 	resultPath, _ := filepath.Abs(filepath.Join(work, "result.json"))
-	fmt.Fprintf(stdout, "%s\n\n", style.For(stdout).Dim(fmt.Sprintf("Running on your Claude Code plan with %s · workspace %s", cmp.Or(cfg.model, "your default model"), work)))
+	// Eval runs start from a blank Claude Code config, so they would not see
+	// the model the user picked with /model unless it is passed on.
+	label := cfg.model
+	if cfg.model == "" {
+		cfg.model, label = userModel()
+	}
+	fmt.Fprintf(stdout, "%s\n\n", style.For(stdout).Dim(fmt.Sprintf("Running on your Claude Code plan with %s · workspace %s", label, work)))
 	o := bench.Options{Runs: cfg.runs, Model: cfg.model, JudgeModel: cfg.judge, MaxCostUSD: cfg.maxCost,
 		Concurrency: cfg.concurrency, Scaffold: cfg.scaffold, AllowTools: cfg.allowTools}
 	if err := bench.Eval(context.Background(), copyDir, resultPath, o, stdout, stderr); err != nil {
@@ -214,4 +221,22 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 		fmt.Fprintln(w, st.Yellow("⚠ No case expects "+short(uncovered)+", so recall can't be measured for it."))
 	}
 	fmt.Fprintln(w)
+}
+
+// userModel returns the model the user picked in Claude Code, and how to
+// name it in output.
+func userModel() (model, label string) {
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	configDir := cmp.Or(os.Getenv("CLAUDE_CONFIG_DIR"), filepath.Join(home, ".claude"))
+	model, source := claudecode.SelectedModel(configDir, cwd)
+	switch {
+	case model == "":
+		return "", "Claude Code's default model, since no /model choice is saved"
+	case source == filepath.Join(configDir, "settings.json"):
+		return model, model + ", your /model choice"
+	case strings.HasPrefix(source, "ANTHROPIC_"):
+		return model, model + ", from $" + source
+	}
+	return model, model + ", from " + tilde(source, home)
 }
