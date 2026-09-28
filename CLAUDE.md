@@ -64,6 +64,7 @@ internal/agent/<name>/   one adapter per agent, filling in what it declares: cla
 internal/report/         rendering and secret masking
 internal/bench/          routing benchmark over claude plugin eval: ground truth, workspace, scores
 internal/frontmatter/    top-level scalars and lists from Markdown YAML headers
+internal/prompt/         arrow-key select and checkbox prompts over a raw terminal, no dependency
 ```
 
 `expose` adds `internal/rules/expose/`, neutral agent descriptions in `internal/agent/`, and `internal/host/` (read-only probes, local or over SSH).
