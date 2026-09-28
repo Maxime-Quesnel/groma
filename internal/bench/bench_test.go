@@ -240,6 +240,37 @@ func TestEvalLeavesTheModelAndSpendToTheUser(t *testing.T) {
 	}
 }
 
+func TestCheckClaudeNamesAClaudeWithoutPluginEval(t *testing.T) {
+	tests := []struct {
+		name, evalHelp, want string
+	}{
+		{"current release", "Usage: claude plugin eval [options] [target]\n  --ablation <mode>", ""},
+		{"older release", "Usage: claude plugin|plugins [options] [command]", "claude is Claude Code 2.1.81, which has no plugin eval"},
+		{"not installed", "", "claude not found on PATH"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bin := t.TempDir()
+			if tt.evalHelp != "" {
+				script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '2.1.81 (Claude Code)'; else echo '" + tt.evalHelp + "'; fi\n"
+				if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("PATH", bin)
+
+			err := CheckClaude(t.Context())
+
+			if tt.want == "" && err != nil {
+				t.Errorf("got %v", err)
+			}
+			if tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)) {
+				t.Errorf("got %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestTimedOutRunsWithoutDispatchDecideNothing(t *testing.T) {
 	s := Suite{Plugin: "shop", Agents: []string{"shop:rails"}, Cases: []Case{
 		{Name: "slow-page", Scenario: "slow-page", Expect: []string{"shop:rails"}},

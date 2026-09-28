@@ -148,6 +148,10 @@ func executeBench(cfg benchConfig, stdout, stderr io.Writer) int {
 	if cfg.dryRun {
 		return 0
 	}
+	if err := bench.CheckClaude(context.Background()); err != nil {
+		fmt.Fprintf(stderr, "groma: %v\n", err)
+		return 2
+	}
 	work := filepath.Join("groma-bench", suite.Plugin+"-"+time.Now().Format("20060102-150405"))
 	copyDir, err := bench.Prepare(suite, cfg.pluginDir, work, selected)
 	if err != nil {

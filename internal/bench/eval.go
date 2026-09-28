@@ -1,11 +1,14 @@
 package bench
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os/exec"
 	"strconv"
+	"strings"
 )
 
 type Options struct {
@@ -35,6 +38,27 @@ func Eval(ctx context.Context, pluginCopy, resultPath string, o Options, stdout,
 		return nil
 	}
 	return err
+}
+
+// CheckClaude makes sure the claude found on PATH can run plugin eval with
+// the flags groma passes. Older Claude Code releases lack it, and an older
+// second install earlier on PATH, from Homebrew for instance, is an easy way
+// to end up running one.
+func CheckClaude(ctx context.Context) error {
+	path, err := exec.LookPath("claude")
+	if err != nil {
+		return errors.New("claude not found on PATH: install Claude Code first")
+	}
+	help, _ := exec.CommandContext(ctx, path, "plugin", "eval", "--help").CombinedOutput()
+	if bytes.Contains(help, []byte("--ablation")) {
+		return nil
+	}
+	version, _ := exec.CommandContext(ctx, path, "--version").Output()
+	release := "an older Claude Code"
+	if fields := strings.Fields(string(version)); len(fields) > 0 {
+		release = "Claude Code " + fields[0]
+	}
+	return fmt.Errorf("%s is %s, which has no plugin eval: update it, or put a newer claude first on PATH", path, release)
 }
 
 func evalArgs(pluginCopy, resultPath string, o Options) []string {
