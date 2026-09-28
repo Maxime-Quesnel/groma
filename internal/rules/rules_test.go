@@ -53,7 +53,7 @@ func check(t *testing.T, r Rule, fixture string) []string {
 	}
 	var evidence []string
 	checked := false
-	for _, c := range tree.Components {
+	for _, c := range tree.Targets {
 		if slices.Contains(r.Kinds, c.Kind) {
 			checked = true
 			evidence = append(evidence, r.Check(c, tree)...)

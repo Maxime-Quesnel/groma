@@ -30,7 +30,7 @@ When in doubt, it's a warning. A red flag makes CI fail.
 
 ## 4. Write the metadata
 
-- **ID** and **Level**, as above, and **Kinds**: the components it checks (`markdown`, `skillsAndCommands`, `agents`, `hooks`, `everything`, ...).
+- **ID** and **Level**, as above, and **Kinds**: the components it checks (`markdown`, `skillsAndCommands`, `agents`, `hooks`, `everything`, or `component.Plugin` for checks of a plugin as a whole).
 - **Title:** one line stating the problem: "Hook on an event Claude Code doesn't have".
 - **Description:** two to four sentences: what is detected, what Claude Code does with it, and what that costs the user.
 - **Remediation:** what to change, concretely.
@@ -42,6 +42,7 @@ When in doubt, it's a warning. A red flag makes CI fail.
 `Check(c *component.Component, t *component.Tree) []string` returns one evidence line per problem, empty when there is none.
 
 - Point at the place: `at(line, ...)` or `fieldAt(c, key, ...)` for frontmatter, `h.Where()` for a hook, `in(c, f, ...)` for a file other than the component's own.
+- Check `t.Targets`' component against the whole tree through `t.Components`: when a single file is checked, the tree still holds its plugin's other components. `hookCode`, `bodyLines` and `commands` cover the common reads.
 - Rules that read frontmatter fields return nothing when `!headerReadable(c)`: `frontmatter-unreadable` already reports it.
 - Quote what you found, clipped with `clip`. Evidence can hold secrets from the files checked: the report masks the common shapes, but never build evidence that spells a secret out on purpose.
 

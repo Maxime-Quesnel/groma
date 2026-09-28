@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "shop:reviewer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo reviewed"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__plugin_shop_db__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo db"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:shop:db",
+            "tool": "flush"
+          }
+        ]
+      }
+    ]
+  }
+}

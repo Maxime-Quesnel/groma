@@ -1,0 +1,6 @@
+{
+  "name": "shop",
+  "commands": [
+    "./commands/db"
+  ]
+}

@@ -59,7 +59,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	findings := rules.Check(tree)
-	report.Text(stdout, shortenHome(args[0]), tree.Components, findings)
+	report.Text(stdout, shortenHome(args[0]), tree.Targets, findings)
 	for _, f := range findings {
 		if f.Rule.Level == rule.RedFlag {
 			return 1

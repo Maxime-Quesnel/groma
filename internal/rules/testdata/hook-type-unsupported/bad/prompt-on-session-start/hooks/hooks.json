@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Summarise the repo."
+          }
+        ]
+      }
+    ]
+  }
+}

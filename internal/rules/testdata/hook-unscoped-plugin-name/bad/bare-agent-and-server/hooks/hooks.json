@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "reviewer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo reviewed"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__db__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo db"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "db",
+            "tool": "flush"
+          }
+        ]
+      }
+    ]
+  }
+}

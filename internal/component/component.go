@@ -5,6 +5,7 @@ package component
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,9 +27,11 @@ const (
 	Agent
 	Command
 	Hooks
+	// Plugin is a plugin as a whole, declared by its manifest.
+	Plugin
 )
 
-var kindNames = [...]string{Skill: "skill", Agent: "agent", Command: "command", Hooks: "hooks"}
+var kindNames = [...]string{Skill: "skill", Agent: "agent", Command: "command", Hooks: "hooks", Plugin: "plugin"}
 
 func (k Kind) String() string { return kindNames[k] }
 
@@ -48,6 +51,8 @@ type Component struct {
 	Header frontmatter.Header
 	// Hooks is what a hooks file, settings file or manifest declares.
 	Hooks HookFile
+	// Manifest is what a plugin's manifest declares.
+	Manifest Manifest
 	// Dir is a skill's directory, or the directory of the file.
 	Dir string
 	// InPlugin is false for a user or project component under .claude.
@@ -55,6 +60,10 @@ type Component struct {
 	// Plugin is the plugin's root, and Project the directory above .claude,
 	// or "" when that directory lies outside the tree.
 	Plugin, Project string
+	// PluginName prefixes the component's name in Claude Code, as in
+	// /shop:pdf or shop:reviewer: the manifest's name, or else the plugin
+	// directory's.
+	PluginName string
 	// Guessed reports that the file's location didn't say what it is, so
 	// its kind comes from its content.
 	Guessed bool
@@ -88,6 +97,25 @@ func (c *Component) Name() string {
 	return strings.TrimSuffix(path.Base(c.Path), path.Ext(c.Path))
 }
 
+// DirName is the name of the component's directory on disk, even when the
+// tree starts inside it.
+func (c *Component) DirName() string { return c.dirName }
+
+// ID is how Claude Code tells the component apart within its plugin or
+// project: a plugin agent's name is prefixed with the subfolders of agents/
+// it sits in, as in review:security.
+func (c *Component) ID() string {
+	if c.Kind != Agent || !c.InPlugin {
+		return c.Name()
+	}
+	parts := strings.Split(c.Path, "/")
+	i := slices.Index(parts, "agents")
+	if i < 0 || i >= len(parts)-2 {
+		return c.Name()
+	}
+	return strings.Join(append(slices.Clone(parts[i+1:len(parts)-1]), c.Name()), ":")
+}
+
 // Roots maps the directory variables a command can use, without their
 // CLAUDE_ prefix, to directories of the tree.
 func (c *Component) Roots() map[string]string {
@@ -106,9 +134,12 @@ func (c *Component) Roots() map[string]string {
 
 type Tree struct {
 	// Root is the directory the paths of Files and Components start from.
-	Root       string
-	Files      []File
+	Root  string
+	Files []File
+	// Components are all the components the tree holds, and Targets the
+	// ones to check: all of them, or the one a file given to Load declares.
 	Components []*Component
+	Targets    []*Component
 	index      map[string]int
 }
 
@@ -156,6 +187,7 @@ func Load(p string) (*Tree, error) {
 		if len(t.Components) == 0 {
 			return nil, fmt.Errorf("found no skill, agent, command or hook in %s", p)
 		}
+		t.Targets = t.Components
 		return t, nil
 	}
 	abs, err := filepath.Abs(p)
@@ -170,13 +202,18 @@ func Load(p string) (*Tree, error) {
 	rel, _ := filepath.Rel(root, abs)
 	rel = filepath.ToSlash(rel)
 	t.find()
-	t.Components = slices.DeleteFunc(t.Components, func(c *Component) bool { return c.Path != rel })
-	if len(t.Components) == 0 {
+	for _, c := range t.Components {
+		if c.Path == rel {
+			t.Targets = append(t.Targets, c)
+		}
+	}
+	if len(t.Targets) == 0 {
 		c, err := t.guess(rel)
 		if err != nil {
 			return nil, err
 		}
-		t.Components = []*Component{c}
+		t.Components = append(t.Components, c)
+		t.Targets = []*Component{c}
 	}
 	return t, nil
 }
@@ -266,6 +303,7 @@ func (t *Tree) find() {
 		case base == "SKILL.md":
 			t.add(&Component{Kind: Skill, Path: f.Path, Dir: path.Dir(f.Path)})
 		case base == "plugin.json" && path.Base(dir) == ".claude-plugin":
+			t.add(&Component{Kind: Plugin, Path: f.Path, Dir: path.Dir(dir), Manifest: parseManifest(f.Content)})
 			files, inline := manifestHooks(f.Content)
 			root := path.Dir(dir)
 			for _, file := range files {
@@ -302,20 +340,49 @@ func (t *Tree) find() {
 			t.add(c)
 		}
 	}
-	slices.SortStableFunc(t.Components, func(a, b *Component) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortStableFunc(t.Components, func(a, b *Component) int {
+		return cmp.Or(strings.Compare(a.Path, b.Path), cmp.Compare(a.Kind, b.Kind))
+	})
+	t.name()
+}
+
+// name gives each plugin component its plugin's name.
+func (t *Tree) name() {
+	names := map[string]string{}
+	for _, c := range t.Components {
+		if c.Kind == Plugin {
+			c.InPlugin, c.Plugin = true, c.Dir
+			names[c.Dir] = cmp.Or(c.Manifest.Name, c.dirName)
+		}
+	}
+	for _, c := range t.Components {
+		if c.InPlugin && c.Plugin != "" {
+			c.PluginName = cmp.Or(names[c.Plugin], filepath.Base(filepath.Join(t.Root, filepath.FromSlash(c.Plugin))))
+		}
+	}
+}
+
+// PluginOf returns the manifest component of c's plugin, if the tree holds it.
+func (t *Tree) PluginOf(c *Component) *Component {
+	for _, p := range t.Components {
+		if p.Kind == Plugin && c.InPlugin && p.Dir == c.Plugin {
+			return p
+		}
+	}
+	return nil
 }
 
 func (t *Tree) add(c *Component) {
 	f, _ := t.File(c.Path)
 	c.Content = f.Content
-	if c.Kind != Hooks {
+	if c.Kind != Hooks && c.Kind != Plugin {
 		c.Header = frontmatter.Parse(f.Content)
 	}
 	if c.Dir == "" {
 		c.Dir = path.Dir(c.Path)
 	}
 	c.dirName = filepath.Base(filepath.Join(t.Root, filepath.FromSlash(c.Dir)))
-	if !c.InPlugin {
+	if !c.InPlugin && c.Kind != Plugin {
 		t.place(c)
 	}
 	t.Components = append(t.Components, c)
