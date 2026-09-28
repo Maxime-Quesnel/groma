@@ -54,9 +54,8 @@ func runBenchPrompts(stdout, stderr io.Writer) int {
 		return 2
 	}
 	model, label := userModel()
-	cfg, err := askBench(term, plugins, label)
+	cfg, err := askBench(term, plugins, model, label)
 	term.Close()
-	cfg.model = model
 	if errors.Is(err, prompt.ErrCanceled) {
 		fmt.Fprintln(stdout, "Canceled.")
 		return 0
@@ -135,10 +134,12 @@ func count(n int, noun string) string {
 }
 
 // askBench asks only what changes from one benchmark to the next: the
-// plugin when there is more than one, the agents, and how thorough to be.
-// The rest takes the defaults the first benchmarks settled on; flags change
-// it, and the command printed afterwards shows them.
-func askBench(term *prompt.Terminal, plugins []pluginChoice, model string) (benchConfig, error) {
+// plugin when there is more than one, the agents, the model, and how
+// thorough to be. The model question starts on detected, the model groma
+// found for the user, labelled as label. The rest takes the defaults the
+// first benchmarks settled on; flags change it, and the command printed
+// afterwards shows them.
+func askBench(term *prompt.Terminal, plugins []pluginChoice, detected, label string) (benchConfig, error) {
 	cfg := benchConfig{concurrency: 2, judge: "sonnet", allowTools: []string{"Edit", "Write"}}
 	st := style.On()
 	p := plugins[0]
@@ -182,12 +183,19 @@ func askBench(term *prompt.Terminal, plugins []pluginChoice, model string) (benc
 	}
 	cfg.scaffold = slices.ContainsFunc(cases, hasScaffold)
 
+	models, options := modelChoices(detected, label)
+	i, err := term.Select("Model", options, 0)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.model = models[i]
+
 	depth := func(runs int) string {
 		total := len(cases) * runs
 		return fmt.Sprintf("%s per case · %s · about %s", count(runs, "run"), count(total, "run"), estimate(total, cfg.concurrency))
 	}
-	term.Say("  %s", st.Dim("Claude runs on your Claude Code plan with "+model+". Other settings: groma bench -h"))
-	i, err := term.Select("Run", []prompt.Option{
+	term.Say("  %s", st.Dim("Claude runs on your Claude Code plan. Other settings: groma bench -h"))
+	i, err = term.Select("Run", []prompt.Option{
 		{Label: "Standard", Hint: depth(3)},
 		{Label: "Quick look", Hint: depth(1)},
 		{Label: "Precise", Hint: depth(5)},
@@ -205,6 +213,23 @@ func askBench(term *prompt.Terminal, plugins []pluginChoice, model string) (benc
 		return cfg, prompt.ErrCanceled
 	}
 	return cfg, nil
+}
+
+// modelChoices lists the models the main session can run on: the one groma
+// detected first, then Claude Code's aliases. The main session is the one
+// that decides which agent to call; agents keep their own model.
+func modelChoices(detected, label string) ([]string, []prompt.Option) {
+	models := []string{detected}
+	options := []prompt.Option{{Label: cmp.Or(detected, "default"), Hint: strings.TrimPrefix(label, detected+", ")}}
+	for _, alias := range []struct{ name, hint string }{
+		{"opus", "Opus 5.5"}, {"sonnet", "Sonnet 5"}, {"fable", "Fable 5.1"}, {"haiku", "the latest Haiku"},
+	} {
+		if alias.name != detected {
+			models = append(models, alias.name)
+			options = append(options, prompt.Option{Label: alias.name, Hint: alias.hint})
+		}
+	}
+	return models, options
 }
 
 func pluginLabel(p pluginChoice) string {
