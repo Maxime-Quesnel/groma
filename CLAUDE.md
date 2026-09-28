@@ -16,12 +16,13 @@ Problem, audience, positioning and roadmap: [docs/VISION.md](docs/VISION.md).
 
 - `groma scan` inspects installed skills, plugins, hooks and MCP servers: hidden instructions, invisible Unicode, `curl | sh`, encoded payloads, reads of `~/.ssh` or `.env`, suspicious network calls, hardcoded secrets, overly broad permissions.
 - `groma expose` checks what a machine exposes, locally or over SSH (`--host user@ip`): agent ports and UIs without authentication, tunnels without an access policy, world-readable secrets, an agent running as root, a mounted Docker socket, SSH and firewall hygiene.
+- `groma bench` measures, for each agent of a plugin, how precisely Claude routes work to it (precision, recall, confusions) and how well the agent then does it, with 95% intervals. Its ground truth is the plugin's own eval suite; it runs a copy of the plugin, never the installed one.
 - `groma fix` proposes safe settings: listen on localhost, tighten secret permissions, disable flagged skills. It always shows a diff and asks for confirmation before changing anything.
 
 ## Principles (non-negotiable)
 
 - **Read-only by default.** `scan` and `expose` never modify anything, locally or on a remote host. Only `fix` writes, after explicit confirmation.
-- **Nothing leaves the machine.** No telemetry, no update check, no network call except to the hosts the user is auditing.
+- **Nothing leaves the machine.** No telemetry, no update check, no network call except to the hosts the user is auditing. The one exception is `groma bench`, which runs the plugin with `claude plugin eval` and so runs Claude through the user's own Claude Code login and plan, with the model they chose in Claude Code: it says so, never publishes the report, and `scan` never calls it.
 - **Secrets are always masked.** A secret groma finds never appears in clear in a report, a log, an error message or a test assertion output.
 - **Agent-neutral.** Each agent is an adapter. The core depends on none of them.
 - **Honest about limits.** Detecting prompt injection is hard: groma is a safety net, not a guarantee. Every rule documents its known false positives.
@@ -61,6 +62,8 @@ internal/rules/scan/     one file per scan rule, its _test.go and testdata/<rule
 internal/plugin/         the agent-neutral view of a scanned tree: files and hooks; Read
 internal/agent/<name>/   one adapter per agent, filling in what it declares: claudecode
 internal/report/         rendering and secret masking
+internal/bench/          routing benchmark over claude plugin eval: ground truth, workspace, scores
+internal/frontmatter/    top-level scalars and lists from Markdown YAML headers
 ```
 
 `expose` adds `internal/rules/expose/`, neutral agent descriptions in `internal/agent/`, and `internal/host/` (read-only probes, local or over SSH).
