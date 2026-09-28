@@ -59,6 +59,9 @@ type Run struct {
 	Work    float64
 	HasWork bool
 	Failed  bool
+	// TimedOut is a run cut short by its time limit, which says nothing
+	// about the plugin unless an agent was dispatched before the cut.
+	TimedOut bool
 }
 
 func (r Result) Runs(s Suite) []Run {
@@ -69,7 +72,7 @@ func (r Result) Runs(s Suite) []Run {
 			routing[g.Name] = g.Type == "tool_used" && g.Config.Tool == "Agent"
 		}
 		for _, arm := range c.Arms.With {
-			run := Run{Case: c.Name, Failed: arm.Error != nil}
+			run := Run{Case: c.Name, Failed: arm.Error != nil, TimedOut: arm.Error != nil && strings.Contains(*arm.Error, "timed out")}
 			var passed, total float64
 			for _, g := range arm.Graders {
 				if strings.HasPrefix(g.Name, calledPrefix) {

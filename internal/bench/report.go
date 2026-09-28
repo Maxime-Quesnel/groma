@@ -11,10 +11,13 @@ import (
 
 func Text(w io.Writer, s Suite, r Result, runs []Run, scores []Score) {
 	short := func(agent string) string { return cmp.Or(strings.TrimPrefix(agent, s.Plugin+":"), "no agent") }
-	failed := 0
+	failed, undecided := 0, 0
 	for _, run := range runs {
 		if run.Failed {
 			failed++
+		}
+		if run.TimedOut && len(run.Dispatched) == 0 {
+			undecided++
 		}
 	}
 	fmt.Fprintf(w, "groma bench · %s · %s · Claude Code %s · %d runs · %s · about $%.2f at list price\n",
@@ -59,7 +62,11 @@ func Text(w io.Writer, s Suite, r Result, runs []Run, scores []Score) {
 			for i, a := range run.Dispatched {
 				names[i] = short(a)
 			}
-			got[cmp.Or(strings.Join(names, "+"), "no agent")]++
+			key := cmp.Or(strings.Join(names, "+"), "no agent")
+			if run.TimedOut {
+				key += " (timed out)"
+			}
+			got[key]++
 		}
 		expects := make([]string, len(c.Expect))
 		for i, a := range c.Expect {
@@ -73,8 +80,11 @@ func Text(w io.Writer, s Suite, r Result, runs []Run, scores []Score) {
 	fmt.Fprintln(w, "when the agent was rightly dispatched, on cases that grade the work. In brackets, a 95% interval: the")
 	fmt.Fprintln(w, "wider of a Wilson interval over runs and a bootstrap over scenarios, since runs of one scenario are")
 	fmt.Fprintln(w, "not independent.")
+	if undecided > 0 {
+		fmt.Fprintf(w, "%d runs timed out before dispatching any agent: they decided nothing, so precision and recall leave them out.\n", undecided)
+	}
 	if failed > 0 {
-		fmt.Fprintf(w, "%d runs ended in an error, such as a timeout; they are scored on what they did before.\n", failed)
+		fmt.Fprintf(w, "%d runs ended in an error, such as a timeout; timed-out runs are left out of work, the others are scored on what they did.\n", failed)
 	}
 }
 

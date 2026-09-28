@@ -23,6 +23,9 @@ type Score struct {
 	// Work sums the work share of the hit runs that have work graders.
 	Work     float64
 	WorkRuns int
+	// Undecided counts runs that timed out before dispatching any agent.
+	// They are left out of precision and recall.
+	Undecided int
 	// scenarios holds the same counts per scenario, for the bootstrap.
 	scenarios map[string]*tally
 }
@@ -36,7 +39,8 @@ func (s Score) Precision() (float64, bool) { return ratio(s.Hit, s.Hit+s.Wrong) 
 func (s Score) Recall() (float64, bool) { return ratio(s.Hit, s.Expected) }
 
 // WorkScore is the mean share of work graders passed when the agent was
-// rightly dispatched, on the cases that grade the work.
+// rightly dispatched, on the cases that grade the work, leaving out runs
+// whose work a time limit cut short.
 func (s Score) WorkScore() (float64, bool) {
 	if s.WorkRuns == 0 {
 		return 0, false
@@ -138,6 +142,10 @@ func ScoreAgents(s Suite, agents []string, runs []Run) []Score {
 				t = &tally{}
 				sc.scenarios[c.Scenario] = t
 			}
+			if run.TimedOut && len(run.Dispatched) == 0 {
+				sc.Undecided++
+				continue
+			}
 			dispatched := slices.Contains(run.Dispatched, agent)
 			if slices.Contains(c.Expect, agent) {
 				sc.Expected++
@@ -145,7 +153,7 @@ func ScoreAgents(s Suite, agents []string, runs []Run) []Score {
 				if dispatched {
 					sc.Hit++
 					t.hit++
-					if run.HasWork {
+					if run.HasWork && !run.TimedOut {
 						sc.Work += run.Work
 						sc.WorkRuns++
 					}

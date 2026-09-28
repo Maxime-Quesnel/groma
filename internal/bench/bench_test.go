@@ -234,3 +234,23 @@ func TestEvalLeavesTheModelAndSpendToTheUser(t *testing.T) {
 		t.Errorf("pinned args: %s", pinned)
 	}
 }
+
+func TestTimedOutRunsWithoutDispatchDecideNothing(t *testing.T) {
+	s := Suite{Plugin: "shop", Agents: []string{"shop:rails"}, Cases: []Case{
+		{Name: "slow-page", Scenario: "slow-page", Expect: []string{"shop:rails"}},
+		{Name: "hot-loop", Scenario: "hot-loop", Expect: []string{"shop:ruby"}},
+	}}
+	runs := []Run{
+		{Case: "slow-page", Dispatched: []string{"shop:rails"}, HasWork: true, Work: 1},
+		{Case: "slow-page", Dispatched: []string{"shop:rails"}, HasWork: true, Work: 0, TimedOut: true, Failed: true},
+		{Case: "slow-page", TimedOut: true, Failed: true},
+		{Case: "hot-loop", TimedOut: true, Failed: true},
+	}
+
+	sc := ScoreAgents(s, s.Agents, runs)[0]
+
+	work, _ := sc.WorkScore()
+	if sc.Expected != 2 || sc.Hit != 2 || sc.Other != 0 || sc.Undecided != 2 || sc.WorkRuns != 1 || work != 1 {
+		t.Errorf("got %+v", sc)
+	}
+}
