@@ -6,7 +6,11 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
+	"math"
+	"strconv"
+	"strings"
 )
 
 const maxTimeout = 3600
@@ -35,4 +39,24 @@ var hookTimeoutInMilliseconds = Rule{
 		}
 		return evidence
 	},
+	Fix: fixTimeoutUnits,
+}
+
+// fixTimeoutUnits reads a timeout over an hour as milliseconds and writes it
+// in seconds. A stuck hook is then cut off sooner, so the fix is unsafe.
+func fixTimeoutUnits(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	if !unsafe {
+		return nil
+	}
+	var edits []fix.Edit
+	for _, h := range c.Hooks.Handlers {
+		var ms float64
+		raw := strings.TrimSpace(string(h.Fields["timeout"]))
+		if json.Unmarshal(h.Fields["timeout"], &ms) != nil || ms <= maxTimeout {
+			continue
+		}
+		seconds := strconv.Itoa(max(1, int(math.Ceil(ms/1000))))
+		edits = append(edits, jsonValueEdits(c, "timeout", raw, seconds)...)
+	}
+	return edits
 }

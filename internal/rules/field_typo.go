@@ -6,6 +6,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -36,6 +37,7 @@ var fieldTypo = Rule{
 		}
 		return evidence
 	},
+	Fix: fixFieldTypos,
 }
 
 // recognized lists the fields Claude Code reads for a kind of component.
@@ -63,4 +65,22 @@ func typoOf(k component.Kind, key string) string {
 		return "allowed-tools"
 	}
 	return suggest(key, known)
+}
+
+// fixFieldTypos renames a misspelled field to the one Claude Code reads. The
+// setting then applies, so the fix is unsafe.
+func fixFieldTypos(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	if !unsafe || !headerReadable(c) {
+		return nil
+	}
+	var edits []fix.Edit
+	for _, f := range c.Header.Fields {
+		meant := typoOf(c.Kind, f.Key)
+		if meant == "" || c.Header.Has(meant) {
+			continue
+		}
+		start, _ := lineRange(c.Content, f.Line, f.Line)
+		edits = append(edits, fix.Edit{Path: c.Path, Start: start, End: start + len(f.Key), New: meant})
+	}
+	return edits
 }

@@ -58,7 +58,7 @@ metadata: {owner: docs}
 	}
 	for key, w := range want {
 		got, ok := h.Field(key)
-		got.Key, got.Line = "", 0
+		got.Key, got.Line, got.EndLine = "", 0, 0
 		if !ok || !reflect.DeepEqual(got, w) {
 			t.Errorf("%s: got %+v, want %+v", key, got, w)
 		}
@@ -66,8 +66,11 @@ metadata: {owner: docs}
 	if f, _ := h.Field("allowed-tools"); !reflect.DeepEqual(f.Items(), []string{"Read", "Bash(git add *, git commit *)"}) {
 		t.Errorf("items: %q", f.Items())
 	}
-	if f, _ := h.Field("tools"); f.Line != 7 {
-		t.Errorf("tools on line %d", f.Line)
+	if f, _ := h.Field("tools"); f.Line != 7 || f.EndLine != 7 {
+		t.Errorf("tools on lines %d-%d", f.Line, f.EndLine)
+	}
+	if f, _ := h.Field("skills"); f.Line != 8 || f.EndLine != 10 {
+		t.Errorf("skills on lines %d-%d", f.Line, f.EndLine)
 	}
 	if h.Body != "# Body\n" || h.BodyLine != 28 {
 		t.Errorf("body %q on line %d", h.Body, h.BodyLine)
@@ -122,5 +125,16 @@ func TestParseSkipsAByteOrderMarkAndCRLF(t *testing.T) {
 
 	if !h.Found || h.Value("name") != "x" || strings.Contains(h.Body, "\r") {
 		t.Errorf("got %+v", h)
+	}
+}
+
+func TestParseDocumentReadsAWholeFile(t *testing.T) {
+	h := ParseDocument([]byte("# groma\ndisable:\n  - description-emphatic\nexclude: [legacy/**]\n"))
+
+	if f, _ := h.Field("disable"); len(h.Problems) > 0 || f.Line != 2 || !reflect.DeepEqual(f.List, []string{"description-emphatic"}) {
+		t.Errorf("got %+v", h)
+	}
+	if f, _ := h.Field("exclude"); !reflect.DeepEqual(f.List, []string{"legacy/**"}) {
+		t.Errorf("exclude: %+v", f)
 	}
 }

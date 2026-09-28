@@ -5,6 +5,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -40,4 +41,22 @@ var missingScript = Rule{
 		}
 		return evidence
 	},
+	Fix: fixScriptMode,
+}
+
+// fixScriptMode makes a script executable when a command runs it directly.
+// The script then runs where it failed, so the fix is unsafe.
+func fixScriptMode(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	if !unsafe {
+		return nil
+	}
+	var edits []fix.Edit
+	for _, cmd := range commands(c) {
+		for _, s := range t.Scripts(cmd.run, c.Roots()) {
+			if f, ok := t.File(s.Path); ok && s.Direct && !f.Executable {
+				edits = append(edits, fix.Edit{Path: s.Path, Executable: true})
+			}
+		}
+	}
+	return edits
 }

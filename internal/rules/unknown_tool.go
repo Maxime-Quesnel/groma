@@ -5,7 +5,10 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
+	"slices"
+	"strings"
 )
 
 var unknownTool = Rule{
@@ -52,6 +55,7 @@ var unknownTool = Rule{
 		}
 		return evidence
 	},
+	Fix: fixUnknownTools,
 }
 
 func whyUnknown(name string) string {
@@ -62,4 +66,38 @@ func whyUnknown(name string) string {
 		return fmt.Sprintf("which isn't a tool; did you mean %s?", s)
 	}
 	return "which no Claude Code tool is called"
+}
+
+// fixUnknownTools removes a tool Claude Code no longer has when its
+// replacement is already listed, which changes nothing. With unsafe, it
+// replaces such a tool, or corrects a tool name's case, which grants or
+// denies that tool.
+func fixUnknownTools(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	keys := []string{"allowed-tools", "disallowed-tools"}
+	if c.Kind == component.Agent {
+		keys = []string{"tools", "disallowedTools"}
+	}
+	var edits []fix.Edit
+	for _, key := range keys {
+		edits = append(edits, listFix(c, key, func(entry string, all []string) (string, bool) {
+			name := claudecode.Tool(entry)
+			if claudecode.KnownTool(name) {
+				return "", false
+			}
+			meant := claudecode.FormerTools[name]
+			if meant == "" {
+				meant = toolCase(name)
+			}
+			switch {
+			case meant == "":
+				return "", false
+			case slices.ContainsFunc(all, func(e string) bool { return claudecode.Tool(e) == meant }) && claudecode.FormerTools[name] != "":
+				return "", true
+			case unsafe:
+				return meant + strings.TrimPrefix(entry, name), true
+			}
+			return "", false
+		})...)
+	}
+	return edits
 }

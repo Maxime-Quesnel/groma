@@ -21,8 +21,9 @@ const (
 )
 
 // Text writes a check: one line per component, with its warnings under it,
-// then every red flag, then a summary line.
-func Text(w io.Writer, target string, components []*component.Component, findings []rule.Finding) {
+// then every red flag, then a summary line that counts the findings the
+// configuration silenced.
+func Text(w io.Writer, target string, components []*component.Component, findings []rule.Finding, silenced int) {
 	st := style.For(w)
 	type key struct{ path, kind string }
 	byComponent := map[key][]rule.Finding{}
@@ -69,7 +70,11 @@ func Text(w io.Writer, target string, components []*component.Component, finding
 			block(w, st, f)
 		}
 	}
-	fmt.Fprintf(w, "\n%s\n", summary(st, len(components), findings))
+	line := summary(st, len(components), findings)
+	if silenced > 0 {
+		line += st.Dim(fmt.Sprintf(" · %d silenced by .groma.yml or groma:disable", silenced))
+	}
+	fmt.Fprintf(w, "\n%s\n", line)
 }
 
 func block(w io.Writer, st style.Style, f rule.Finding) {
@@ -198,4 +203,25 @@ func escape(s string) string {
 
 func notGraphic(r rune) bool {
 	return !unicode.IsGraphic(r)
+}
+
+// Diff writes a unified diff in color, with secrets masked and untrusted
+// text escaped like the rest of the report. Only the display is masked: the
+// file keeps its real content.
+func Diff(w io.Writer, lines []string) {
+	st := style.For(w)
+	for _, line := range lines {
+		shown := escape(mask(line))
+		switch {
+		case strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++"):
+			shown = st.Bold(shown)
+		case strings.HasPrefix(line, "@@"):
+			shown = st.Cyan(shown)
+		case strings.HasPrefix(line, "-"):
+			shown = st.Red(shown)
+		case strings.HasPrefix(line, "+"):
+			shown = st.Green(shown)
+		}
+		fmt.Fprintln(w, shown)
+	}
 }

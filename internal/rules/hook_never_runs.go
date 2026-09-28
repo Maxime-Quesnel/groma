@@ -7,6 +7,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -54,6 +55,7 @@ var hookNeverRuns = Rule{
 		}
 		return evidence
 	},
+	Fix: fixNeverRuns,
 }
 
 // deadMatcher says why one exact matcher value can never match on event, or
@@ -113,4 +115,59 @@ func splitRules(s string) []string {
 		}
 	}
 	return append(rules, s[start:])
+}
+
+// fixNeverRuns makes a dead matcher or if condition name what it evidently
+// meant: the tool in its right case, the tool that replaced a removed one,
+// every tool of an MCP server. The hook then runs, so the fix is unsafe.
+func fixNeverRuns(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	if !unsafe {
+		return nil
+	}
+	var edits []fix.Edit
+	for _, g := range c.Hooks.Groups {
+		alternatives, exact := claudecode.MatcherAlternatives(g.Matcher)
+		if !exact || !slices.Contains(claudecode.ToolEvents, g.Event) {
+			continue
+		}
+		var meant []string
+		for _, a := range alternatives {
+			m := meantTool(a)
+			if m == "" || deadMatcher(g.Event, a) == "" {
+				meant = nil
+				break
+			}
+			if !slices.Contains(meant, m) {
+				meant = append(meant, m)
+			}
+		}
+		// An MCP server's wildcard makes the whole matcher a regular
+		// expression, so it only replaces a matcher on its own.
+		if len(meant) == 0 || len(meant) > 1 && slices.ContainsFunc(meant, func(m string) bool { return strings.Contains(m, "*") }) {
+			continue
+		}
+		edits = append(edits, jsonValueEdits(c, "matcher", jsonString(g.Matcher), jsonString(joinMatcher(g.Matcher, meant)))...)
+	}
+	for _, h := range c.Hooks.Handlers {
+		condition, ok := h.String("if")
+		if !ok || !slices.Contains(claudecode.ToolEvents, h.Event) {
+			continue
+		}
+		tool := claudecode.Tool(condition)
+		if m := meantTool(tool); m != "" && m != tool && !strings.Contains(m, "*") {
+			edits = append(edits, jsonValueEdits(c, "if", jsonString(condition), jsonString(m+strings.TrimPrefix(condition, tool)))...)
+		}
+	}
+	return edits
+}
+
+// meantTool returns the tool a dead matcher value evidently means, or "".
+func meantTool(value string) string {
+	switch {
+	case claudecode.FormerTools[value] != "":
+		return claudecode.FormerTools[value]
+	case strings.HasPrefix(value, "mcp__") && !strings.Contains(strings.TrimPrefix(value, "mcp__"), "__"):
+		return value + "__.*"
+	}
+	return toolCase(value)
 }

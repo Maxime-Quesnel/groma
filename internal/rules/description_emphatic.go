@@ -6,6 +6,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -38,6 +39,7 @@ var descriptionEmphatic = Rule{
 		}
 		return evidence
 	},
+	Fix: fixEmphasis,
 }
 
 var emphatic = regexp.MustCompile(`\b(?:MUST(?: BE USED)?|CRITICAL|ALWAYS|NEVER|IMPORTANT|REQUIRED)\b`)
@@ -50,4 +52,46 @@ func dedupe(words []string) []string {
 		}
 	}
 	return unique
+}
+
+// fixEmphasis rewrites capitals in a description in plain words: MUST BE USED
+// opening a sentence becomes Use proactively, as Claude Code's documentation
+// words it, and other words go to lowercase. How often Claude picks the
+// component may change, so the fix is unsafe.
+func fixEmphasis(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	if !unsafe || !headerReadable(c) {
+		return nil
+	}
+	var edits []fix.Edit
+	for _, key := range []string{"description", "when_to_use"} {
+		f, ok := c.Header.Field(key)
+		if !ok {
+			continue
+		}
+		start, end := lineRange(c.Content, f.Line, f.EndLine)
+		text := string(c.Content[start:end])
+		var b strings.Builder
+		at := 0
+		for _, m := range emphatic.FindAllStringIndex(text, -1) {
+			word := text[m[0]:m[1]]
+			before := strings.TrimRight(text[:m[0]], " \t\n\"'")
+			opens := strings.HasSuffix(before, key+":") || strings.HasSuffix(before, key+": |") ||
+				strings.HasSuffix(before, key+": >") || before != "" && strings.ContainsRune(".!?", rune(before[len(before)-1]))
+			replacement := strings.ToLower(word)
+			switch {
+			case word == "MUST BE USED" && opens:
+				replacement = "Use proactively"
+			case opens:
+				replacement = strings.ToUpper(replacement[:1]) + replacement[1:]
+			}
+			b.WriteString(text[at:m[0]])
+			b.WriteString(replacement)
+			at = m[1]
+		}
+		b.WriteString(text[at:])
+		if calm := b.String(); calm != text {
+			edits = append(edits, fix.Edit{Path: c.Path, Start: start, End: end, New: calm})
+		}
+	}
+	return edits
 }

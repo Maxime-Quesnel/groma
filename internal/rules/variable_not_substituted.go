@@ -7,6 +7,7 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -54,6 +55,7 @@ var variableNotSubstituted = Rule{
 		}
 		return evidence
 	},
+	Fix: fixBraces,
 }
 
 var (
@@ -61,3 +63,22 @@ var (
 	pluginVariable = regexp.MustCompile(`\$\{CLAUDE_PLUGIN_(?:ROOT|DATA)\}`)
 	notClaudeCode  = regexp.MustCompile(`\$ARGUMENTS\.\d+|\$IF\(`)
 )
+
+// fixBraces writes $CLAUDE_PLUGIN_ROOT/ and its kind with braces, the form
+// Claude Code replaces. The path then resolves where it didn't, so the fix
+// is unsafe.
+func fixBraces(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	if !unsafe || c.Kind == component.Hooks {
+		return nil
+	}
+	var edits []fix.Edit
+	bodyLines(c, func(n int, line string) {
+		braced := unbraced.ReplaceAllStringFunc(line, func(m string) string {
+			return "${" + strings.TrimSuffix(strings.TrimPrefix(m, "$"), "/") + "}/"
+		})
+		if e, ok := replaceInLine(c, n, line, braced); ok {
+			edits = append(edits, e)
+		}
+	})
+	return edits
+}

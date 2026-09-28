@@ -4,10 +4,13 @@ package rules
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/config"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 )
 
@@ -15,6 +18,12 @@ type Rule struct {
 	rule.Meta
 	Kinds []component.Kind
 	Check func(c *component.Component, t *component.Tree) []string
+	// Fix, when set, returns the edits that correct what Check finds. Safe
+	// edits change nothing where the component works today: they remove
+	// what Claude Code ignores, or make a command robust. With unsafe set,
+	// it also returns edits that change what runs, when, or with which
+	// tools, which need the author's review.
+	Fix func(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit
 }
 
 var All = []Rule{
@@ -100,19 +109,40 @@ var All = []Rule{
 	hookTimeoutInMilliseconds,
 }
 
-func Check(t *component.Tree) []rule.Finding {
-	var findings []rule.Finding
+// Check runs every rule on the tree's targets, except the ones the
+// configuration or the component itself turns off, which it counts.
+func Check(t *component.Tree, cfg config.Config) (findings []rule.Finding, silenced int) {
 	for _, c := range t.Targets {
 		for _, r := range All {
 			if !slices.Contains(r.Kinds, c.Kind) {
 				continue
 			}
-			if evidence := r.Check(c, t); len(evidence) > 0 {
+			evidence := r.Check(c, t)
+			switch {
+			case len(evidence) == 0:
+			case !applies(r, c, t, cfg):
+				silenced++
+			default:
 				findings = append(findings, rule.Finding{Rule: r.Meta, Path: c.Path, Kind: c.Kind.String(), Evidence: evidence})
 			}
 		}
 	}
-	return findings
+	return findings, silenced
+}
+
+// applies reports whether neither the configuration nor the component turns
+// the rule off.
+func applies(r Rule, c *component.Component, t *component.Tree, cfg config.Config) bool {
+	return cfg.Allows(r.ID, filepath.Join(t.Root, filepath.FromSlash(c.Path))) && !slices.Contains(c.Disabled(), r.ID)
+}
+
+// IDs lists every rule's ID, for the configuration to check its names against.
+func IDs() []string {
+	ids := make([]string, len(All))
+	for i, r := range All {
+		ids[i] = r.ID
+	}
+	return ids
 }
 
 var (
