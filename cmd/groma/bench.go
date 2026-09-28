@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Maxime-Quesnel/groma/internal/agent/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/bench"
 	"github.com/Maxime-Quesnel/groma/internal/style"
 )
@@ -154,7 +155,13 @@ func executeBench(cfg benchConfig, stdout, stderr io.Writer) int {
 		return 2
 	}
 	resultPath, _ := filepath.Abs(filepath.Join(work, "result.json"))
-	fmt.Fprintf(stdout, "%s\n\n", style.For(stdout).Dim(fmt.Sprintf("Running on your Claude Code plan with %s · workspace %s", cmp.Or(cfg.model, "your default model"), work)))
+	// Eval runs start from a blank Claude Code config, so they would not see
+	// the model the user picked with /model unless it is passed on.
+	label := cfg.model
+	if cfg.model == "" {
+		cfg.model, label = userModel()
+	}
+	fmt.Fprintf(stdout, "%s\n\n", style.For(stdout).Dim(fmt.Sprintf("Running on your Claude Code plan with %s · workspace %s", label, work)))
 	o := bench.Options{Runs: cfg.runs, Model: cfg.model, JudgeModel: cfg.judge, MaxCostUSD: cfg.maxCost,
 		Concurrency: cfg.concurrency, Scaffold: cfg.scaffold, AllowTools: cfg.allowTools}
 	if err := bench.Eval(context.Background(), copyDir, resultPath, o, stdout, stderr); err != nil {
@@ -195,15 +202,15 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 		return strings.Join(out, ", ")
 	}
 	scenarios := map[string]bool{}
-	for _, c := range cases {
+	rows := make([][]style.Cell, len(cases))
+	for i, c := range cases {
 		scenarios[c.Scenario] = true
+		expects, forbids := cmp.Or(short(c.Expect), "no agent"), cmp.Or(short(c.Avoid), "—")
+		rows[i] = []style.Cell{style.Plain(c.Name), {Text: expects, Styled: st.Green(expects)}, {Text: forbids, Styled: st.Red(forbids)}}
 	}
-	fmt.Fprintf(w, "%s  %s\n\n", st.Bold("groma bench · "+s.Plugin),
+	fmt.Fprintf(w, "%s  %s\n", st.Bold("groma bench · "+s.Plugin),
 		st.Dim(fmt.Sprintf("%s in %s · %s each · %s", count(len(cases), "case"), count(len(scenarios), "scenario"), count(runs, "run"), count(len(cases)*runs, "run"))))
-	fmt.Fprintln(w, st.Dim(fmt.Sprintf("%-52s %-28s %s", "CASE", "EXPECTS", "FORBIDS")))
-	for _, c := range cases {
-		fmt.Fprintf(w, "%-52s %s %s\n", c.Name, style.Pad(cmp.Or(short(c.Expect), "no agent"), 28, st.Green), st.Red(short(c.Avoid)))
-	}
+	st.Table(w, []string{"Case", "Expects", "Forbids"}, rows)
 	var uncovered []string
 	for _, a := range agents {
 		if !slices.ContainsFunc(s.Cases, func(c bench.Case) bool { return slices.Contains(c.Expect, a) }) {
@@ -211,7 +218,29 @@ func printPlan(w io.Writer, s bench.Suite, agents []string, cases []bench.Case, 
 		}
 	}
 	if len(uncovered) > 0 {
-		fmt.Fprintf(w, "\n%s\n", st.Yellow("⚠ No case expects "+short(uncovered)+", so recall can't be measured for it."))
+		fmt.Fprintln(w, st.Yellow("⚠ No case expects "+short(uncovered)+", so recall can't be measured for it."))
 	}
 	fmt.Fprintln(w)
+}
+
+// userModel returns the model the user runs Claude Code with, and how to
+// name it in output: the model of the Claude Code session groma runs in, if
+// any, then the model /model saved for new sessions.
+func userModel() (model, label string) {
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	configDir := cmp.Or(os.Getenv("CLAUDE_CONFIG_DIR"), filepath.Join(home, ".claude"))
+	if model := claudecode.SessionModel(configDir, os.Getenv("CLAUDE_CODE_SESSION_ID")); model != "" {
+		return model, model + ", the model of this Claude Code session"
+	}
+	model, source := claudecode.SelectedModel(configDir, cwd)
+	switch {
+	case model == "":
+		return "", "Claude Code's default model, since no /model choice is saved"
+	case source == filepath.Join(configDir, "settings.json"):
+		return model, model + ", your /model choice"
+	case strings.HasPrefix(source, "ANTHROPIC_"):
+		return model, model + ", from $" + source
+	}
+	return model, model + ", from " + tilde(source, home)
 }

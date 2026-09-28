@@ -54,7 +54,7 @@ func TestAskBenchAsksOnlyForAgentsAndDepth(t *testing.T) {
 	}, "")
 	var out strings.Builder
 
-	cfg, err := askBench(prompt.New(strings.NewReader(keys), &out), plugins)
+	cfg, err := askBench(prompt.New(strings.NewReader(keys), &out), plugins, "opus, your /model choice")
 
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestAskBenchAsksOnlyForAgentsAndDepth(t *testing.T) {
 		t.Errorf("got %+v", cfg)
 	}
 	plain := ansi.ReplaceAllString(out.String(), "")
-	for _, want := range []string{"✔ Plugin  shop 1.2.0", "Check at least one agent", "5 runs per case · 5 runs", "✔ Run  Precise"} {
+	for _, want := range []string{"✔ Plugin  shop 1.2.0", "Check at least one agent", "with opus, your /model choice.", "5 runs per case · 5 runs", "✔ Run  Precise"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("output lacks %q:\n%s", want, plain)
 		}
@@ -78,12 +78,12 @@ func TestAskBenchShowsThePlanOrCancels(t *testing.T) {
 	root := testMarketplace(t)
 	plugins := findPlugins(root, filepath.Join(t.TempDir(), "no-config"), t.TempDir())
 
-	cfg, err := askBench(prompt.New(strings.NewReader(" \r\x1b[A\x1b[A\r"), &strings.Builder{}), plugins)
+	cfg, err := askBench(prompt.New(strings.NewReader(" \r\x1b[A\x1b[A\r"), &strings.Builder{}), plugins, "opus")
 	if err != nil || !cfg.dryRun || cfg.runs != 3 {
 		t.Errorf("plan only: got %+v, %v", cfg, err)
 	}
 
-	_, err = askBench(prompt.New(strings.NewReader(" \r\x1b[A\r"), &strings.Builder{}), plugins)
+	_, err = askBench(prompt.New(strings.NewReader(" \r\x1b[A\r"), &strings.Builder{}), plugins, "opus")
 	if !errors.Is(err, prompt.ErrCanceled) {
 		t.Errorf("cancel: got %v", err)
 	}
@@ -116,5 +116,49 @@ func TestEstimate(t *testing.T) {
 		if got := estimate(tc.runs, tc.concurrency); got != tc.want {
 			t.Errorf("estimate(%d, %d) = %q, want %q", tc.runs, tc.concurrency, got, tc.want)
 		}
+	}
+}
+
+func TestUserModelNamesTheSlashModelChoice(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("ANTHROPIC_DEFAULT_MODEL", "")
+	t.Chdir(t.TempDir())
+
+	if model, label := userModel(); model != "" || !strings.Contains(label, "no /model choice") {
+		t.Errorf("nothing saved: got %q, %q", model, label)
+	}
+
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"model": "opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if model, label := userModel(); model != "opus" || label != "opus, your /model choice" {
+		t.Errorf("saved choice: got %q, %q", model, label)
+	}
+}
+
+func TestUserModelPrefersTheCurrentSession(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("ANTHROPIC_MODEL", "sonnet")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "s-1")
+	t.Chdir(t.TempDir())
+	transcript := filepath.Join(home, ".claude", "projects", "-work", "s-1.jsonl")
+	if err := os.MkdirAll(filepath.Dir(transcript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(transcript, []byte(`{"type":"assistant","message":{"model":"claude-opus-5-5"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if model, label := userModel(); model != "claude-opus-5-5" || label != "claude-opus-5-5, the model of this Claude Code session" {
+		t.Errorf("got %q, %q", model, label)
 	}
 }

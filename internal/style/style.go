@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
+	"unicode/utf8"
 )
 
 type Style struct{ on bool }
@@ -48,3 +50,50 @@ func (s Style) Badge(text string) string { return s.paint("1;97;41", text) }
 func Pad(text string, width int, paint func(string) string) string {
 	return paint(fmt.Sprintf("%-*s", width, text))
 }
+
+// Cell is one table value: Text is what it reads as, Styled what it prints
+// as. Column widths come from Text, so colors never shift the borders.
+type Cell struct{ Text, Styled string }
+
+func Plain(text string) Cell { return Cell{text, text} }
+
+// Table draws rows under headers, in a box.
+func (s Style) Table(w io.Writer, headers []string, rows [][]Cell) {
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = width(h)
+	}
+	for _, r := range rows {
+		for i, c := range r {
+			widths[i] = max(widths[i], width(c.Text))
+		}
+	}
+	rule := func(left, mid, right string) string {
+		parts := make([]string, len(widths))
+		for i, n := range widths {
+			parts[i] = strings.Repeat("─", n+2)
+		}
+		return s.Dim(left + strings.Join(parts, mid) + right)
+	}
+	row := func(cells []Cell) string {
+		var b strings.Builder
+		b.WriteString(s.Dim("│"))
+		for i, c := range cells {
+			b.WriteString(" " + c.Styled + strings.Repeat(" ", widths[i]-width(c.Text)) + " " + s.Dim("│"))
+		}
+		return b.String()
+	}
+	head := make([]Cell, len(headers))
+	for i, h := range headers {
+		head[i] = Cell{h, s.Bold(h)}
+	}
+	fmt.Fprintln(w, rule("┌", "┬", "┐"))
+	fmt.Fprintln(w, row(head))
+	fmt.Fprintln(w, rule("├", "┼", "┤"))
+	for _, r := range rows {
+		fmt.Fprintln(w, row(r))
+	}
+	fmt.Fprintln(w, rule("└", "┴", "┘"))
+}
+
+func width(text string) int { return utf8.RuneCountInString(text) }
