@@ -20,9 +20,9 @@ type Score struct {
 	Instead map[string]int
 	// WrongCases counts the wrong dispatches per case.
 	WrongCases map[string]int
-	// Work sums the work share of the hit runs that have work graders.
-	Work     float64
-	WorkRuns int
+	// Checks and Judge average the work shares of the hit runs that have
+	// such graders, leaving out runs whose work a time limit cut short.
+	Checks, Judge Mean
 	// Undecided counts runs that timed out before dispatching any agent.
 	// They are left out of precision and recall.
 	Undecided int
@@ -38,14 +38,23 @@ func (s Score) Precision() (float64, bool) { return ratio(s.Hit, s.Hit+s.Wrong) 
 // Recall is the share of the runs that needed the agent and got it.
 func (s Score) Recall() (float64, bool) { return ratio(s.Hit, s.Expected) }
 
-// WorkScore is the mean share of work graders passed when the agent was
-// rightly dispatched, on the cases that grade the work, leaving out runs
-// whose work a time limit cut short.
-func (s Score) WorkScore() (float64, bool) {
-	if s.WorkRuns == 0 {
-		return 0, false
+type Mean struct {
+	sum  float64
+	runs int
+}
+
+func (m *Mean) add(g graded) {
+	if v, ok := g.share(); ok {
+		m.sum += v
+		m.runs++
 	}
-	return s.Work / float64(s.WorkRuns), true
+}
+
+func (m Mean) Value() (value float64, runs int, ok bool) {
+	if m.runs == 0 {
+		return 0, 0, false
+	}
+	return m.sum / float64(m.runs), m.runs, true
 }
 
 // Scenarios counts the scenarios that expect the agent.
@@ -153,9 +162,9 @@ func ScoreAgents(s Suite, agents []string, runs []Run) []Score {
 				if dispatched {
 					sc.Hit++
 					t.hit++
-					if run.HasWork && !run.TimedOut {
-						sc.Work += run.Work
-						sc.WorkRuns++
+					if !run.TimedOut {
+						sc.Checks.add(run.Checks)
+						sc.Judge.add(run.Judge)
 					}
 					continue
 				}

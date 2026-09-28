@@ -38,6 +38,7 @@ func runBench(args []string, stdout, stderr io.Writer) int {
 	cases := flags.String("cases", "", "an extra directory of eval cases, next to the plugin's own")
 	runs := flags.Int("runs", 5, "runs per case")
 	model := flags.String("model", "", "model under test; defaults to the one set in Claude Code. Set it to compare results over time")
+	judge := flags.String("judge-model", "", "model that grades the cases' llm graders; claude plugin eval's default is a small fast one")
 	maxCost := flags.Float64("max-cost-usd", 0, "stop once the runs' list-price estimate reaches this amount")
 	concurrency := flags.Int("concurrency", 1, "runs at once, 1 to 8")
 	scaffold := flags.Bool("scaffold", false, "run the cases' scaffold scripts, as you")
@@ -85,7 +86,7 @@ func runBench(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *from != "" {
-		return scoreResult(*from, "", suite, agents, stdout, stderr)
+		return scoreResult(*from, "", *judge, suite, agents, stdout, stderr)
 	}
 	printPlan(stdout, suite, agents, selected, *runs)
 	if *dryRun {
@@ -99,7 +100,7 @@ func runBench(args []string, stdout, stderr io.Writer) int {
 	}
 	resultPath, _ := filepath.Abs(filepath.Join(work, "result.json"))
 	fmt.Fprintf(stdout, "Running with %s, through your Claude Code plan. Workspace: %s\n\n", cmp.Or(*model, "your Claude Code default model"), work)
-	o := bench.Options{Runs: *runs, Model: *model, MaxCostUSD: *maxCost, Concurrency: *concurrency, Scaffold: *scaffold}
+	o := bench.Options{Runs: *runs, Model: *model, JudgeModel: *judge, MaxCostUSD: *maxCost, Concurrency: *concurrency, Scaffold: *scaffold}
 	if *allowTools != "" {
 		o.AllowTools = strings.Split(*allowTools, ",")
 	}
@@ -107,12 +108,12 @@ func runBench(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "groma: claude plugin eval: %v\n", err)
 		return 2
 	}
-	return scoreResult(resultPath, filepath.Join(work, "report.txt"), suite, agents, stdout, stderr)
+	return scoreResult(resultPath, filepath.Join(work, "report.txt"), *judge, suite, agents, stdout, stderr)
 }
 
 // scoreResult reports on a claude plugin eval result, and saves the report
 // to reportPath when it is set.
-func scoreResult(resultPath, reportPath string, suite bench.Suite, agents []string, stdout, stderr io.Writer) int {
+func scoreResult(resultPath, reportPath, judge string, suite bench.Suite, agents []string, stdout, stderr io.Writer) int {
 	result, err := bench.ReadResult(resultPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "groma: %v\n", err)
@@ -120,7 +121,7 @@ func scoreResult(resultPath, reportPath string, suite bench.Suite, agents []stri
 	}
 	runs := result.Runs(suite)
 	var report strings.Builder
-	bench.Text(io.MultiWriter(stdout, &report), suite, result, runs, bench.ScoreAgents(suite, agents, runs))
+	bench.Text(io.MultiWriter(stdout, &report), suite, result, judge, runs, bench.ScoreAgents(suite, agents, runs))
 	if reportPath == "" {
 		return 0
 	}

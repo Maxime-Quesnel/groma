@@ -207,29 +207,31 @@ func TestRunsScoreWorkGradersOnly(t *testing.T) {
 	err := json.Unmarshal([]byte(`{"cases": [{"name": "slow-page",
 		"graders": [{"name": "picks", "type": "tool_used", "config": {"tool": "Agent"}},
 			{"name": "eager", "type": "regex", "config": {}}, {"name": "no-edit", "type": "tool_used", "config": {"tool": "Edit"}},
-			{"name": "groma-called-shop--rails", "type": "tool_used", "config": {"tool": "Agent"}}],
+			{"name": "fast", "type": "llm", "config": {}}, {"name": "groma-called-shop--rails", "type": "tool_used", "config": {"tool": "Agent"}}],
 		"arms": {"with": [{"error": null, "graders": [{"name": "picks", "passed": true, "weight": 1},
 			{"name": "eager", "passed": true, "weight": 3}, {"name": "no-edit", "passed": false, "weight": 1},
-			{"name": "groma-called-shop--rails", "passed": true, "weight": 0.001}]}]}}]}`), &r)
+			{"name": "fast", "passed": false, "weight": 3}, {"name": "groma-called-shop--rails", "passed": true, "weight": 0.001}]}]}}]}`), &r)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	runs := r.Runs(Suite{Plugin: "shop", Agents: []string{"shop:rails"}})
 
-	if len(runs) != 1 || !runs[0].HasWork || runs[0].Work != 0.75 || !slices.Equal(runs[0].Dispatched, []string{"shop:rails"}) {
+	checks, hasChecks := runs[0].Checks.share()
+	judge, hasJudge := runs[0].Judge.share()
+	if len(runs) != 1 || !hasChecks || checks != 0.75 || !hasJudge || judge != 0 || !slices.Equal(runs[0].Dispatched, []string{"shop:rails"}) {
 		t.Errorf("got %+v", runs)
 	}
 }
 
 func TestEvalLeavesTheModelAndSpendToTheUser(t *testing.T) {
 	plain := strings.Join(evalArgs("/w/shop", "/w/result.json", Options{Runs: 3}), " ")
-	pinned := strings.Join(evalArgs("/w/shop", "/w/result.json", Options{Runs: 3, Model: "claude-sonnet-5", MaxCostUSD: 20, Scaffold: true, AllowTools: []string{"Edit", "Write"}}), " ")
+	pinned := strings.Join(evalArgs("/w/shop", "/w/result.json", Options{Runs: 3, Model: "claude-sonnet-5", JudgeModel: "sonnet", MaxCostUSD: 20, Scaffold: true, AllowTools: []string{"Edit", "Write"}}), " ")
 
-	if strings.Contains(plain, "--model") || strings.Contains(plain, "--max-cost-usd") || !strings.Contains(plain, "--no-publish") {
+	if strings.Contains(plain, "--model") || strings.Contains(plain, "--judge-model") || strings.Contains(plain, "--max-cost-usd") || !strings.Contains(plain, "--no-publish") {
 		t.Errorf("default args: %s", plain)
 	}
-	if !strings.Contains(pinned, "--model claude-sonnet-5") || !strings.Contains(pinned, "--max-cost-usd 20") ||
+	if !strings.Contains(pinned, "--model claude-sonnet-5") || !strings.Contains(pinned, "--judge-model sonnet") || !strings.Contains(pinned, "--max-cost-usd 20") ||
 		!strings.HasSuffix(pinned, "--scaffold --allow-tools Edit Write") {
 		t.Errorf("pinned args: %s", pinned)
 	}
@@ -241,16 +243,16 @@ func TestTimedOutRunsWithoutDispatchDecideNothing(t *testing.T) {
 		{Name: "hot-loop", Scenario: "hot-loop", Expect: []string{"shop:ruby"}},
 	}}
 	runs := []Run{
-		{Case: "slow-page", Dispatched: []string{"shop:rails"}, HasWork: true, Work: 1},
-		{Case: "slow-page", Dispatched: []string{"shop:rails"}, HasWork: true, Work: 0, TimedOut: true, Failed: true},
+		{Case: "slow-page", Dispatched: []string{"shop:rails"}, Checks: graded{passed: 2, total: 2}},
+		{Case: "slow-page", Dispatched: []string{"shop:rails"}, Checks: graded{total: 2}, TimedOut: true, Failed: true},
 		{Case: "slow-page", TimedOut: true, Failed: true},
 		{Case: "hot-loop", TimedOut: true, Failed: true},
 	}
 
 	sc := ScoreAgents(s, s.Agents, runs)[0]
 
-	work, _ := sc.WorkScore()
-	if sc.Expected != 2 || sc.Hit != 2 || sc.Other != 0 || sc.Undecided != 2 || sc.WorkRuns != 1 || work != 1 {
+	checks, n, _ := sc.Checks.Value()
+	if _, _, judged := sc.Judge.Value(); sc.Expected != 2 || sc.Hit != 2 || sc.Other != 0 || sc.Undecided != 2 || n != 1 || checks != 1 || judged {
 		t.Errorf("got %+v", sc)
 	}
 }

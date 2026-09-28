@@ -11,6 +11,7 @@ import (
 type Options struct {
 	Runs        int
 	Model       string
+	JudgeModel  string
 	MaxCostUSD  float64
 	Concurrency int
 	// Scaffold runs each case's scaffold script, as the user.
@@ -46,6 +47,9 @@ func evalArgs(pluginCopy, resultPath string, o Options) []string {
 	// Without a model, runs use the one the user chose in Claude Code.
 	if o.Model != "" {
 		args = append(args, "--model", o.Model)
+	}
+	if o.JudgeModel != "" {
+		args = append(args, "--judge-model", o.JudgeModel)
 	}
 	if o.MaxCostUSD > 0 {
 		args = append(args, "--max-cost-usd", strconv.FormatFloat(o.MaxCostUSD, 'f', -1, 64))

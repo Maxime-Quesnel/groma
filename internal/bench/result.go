@@ -53,12 +53,12 @@ type Run struct {
 	Case string
 	// Dispatched are the agents Claude dispatched during the run.
 	Dispatched []string
-	// Work is the weighted share of the case's work graders the run passed,
-	// the graders that check what was produced rather than who produced it.
-	// HasWork is false when the case has none.
-	Work    float64
-	HasWork bool
-	Failed  bool
+	// Checks and Judge weigh the case's work graders, those that grade what
+	// was produced rather than who produced it: exact checks such as regexes
+	// and tool calls, and the verdicts of a judge model, which can refuse a
+	// right answer phrased another way.
+	Checks, Judge graded
+	Failed        bool
 	// TimedOut is a run cut short by its time limit, which says nothing
 	// about the plugin unless an agent was dispatched before the cut.
 	TimedOut bool
@@ -67,13 +67,13 @@ type Run struct {
 func (r Result) Runs(s Suite) []Run {
 	var runs []Run
 	for _, c := range r.Cases {
-		routing := map[string]bool{}
+		routing, kinds := map[string]bool{}, map[string]string{}
 		for _, g := range c.Graders {
 			routing[g.Name] = g.Type == "tool_used" && g.Config.Tool == "Agent"
+			kinds[g.Name] = g.Type
 		}
 		for _, arm := range c.Arms.With {
 			run := Run{Case: c.Name, Failed: arm.Error != nil, TimedOut: arm.Error != nil && strings.Contains(*arm.Error, "timed out")}
-			var passed, total float64
 			for _, g := range arm.Graders {
 				if strings.HasPrefix(g.Name, calledPrefix) {
 					i := slices.IndexFunc(s.Agents, func(a string) bool { return calledGrader(a) == g.Name })
@@ -82,19 +82,33 @@ func (r Result) Runs(s Suite) []Run {
 					}
 					continue
 				}
-				if routing[g.Name] {
-					continue
+				switch {
+				case routing[g.Name]:
+				case kinds[g.Name] == "llm" || kinds[g.Name] == "baseline":
+					run.Judge.add(g.Weight, g.Passed)
+				default:
+					run.Checks.add(g.Weight, g.Passed)
 				}
-				total += g.Weight
-				if g.Passed {
-					passed += g.Weight
-				}
-			}
-			if total > 0 {
-				run.Work, run.HasWork = passed/total, true
 			}
 			runs = append(runs, run)
 		}
 	}
 	return runs
+}
+
+// graded is the weight of a run's work graders, and how much of it passed.
+type graded struct{ passed, total float64 }
+
+func (g *graded) add(weight float64, passed bool) {
+	g.total += weight
+	if passed {
+		g.passed += weight
+	}
+}
+
+func (g graded) share() (float64, bool) {
+	if g.total == 0 {
+		return 0, false
+	}
+	return g.passed / g.total, true
 }
