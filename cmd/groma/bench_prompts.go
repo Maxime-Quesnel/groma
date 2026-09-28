@@ -53,8 +53,10 @@ func runBenchPrompts(stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "groma: %v\n", err)
 		return 2
 	}
-	cfg, err := askBench(term, plugins)
+	model, label := userModel()
+	cfg, err := askBench(term, plugins, label)
 	term.Close()
+	cfg.model = model
 	if errors.Is(err, prompt.ErrCanceled) {
 		fmt.Fprintln(stdout, "Canceled.")
 		return 0
@@ -136,7 +138,7 @@ func count(n int, noun string) string {
 // plugin when there is more than one, the agents, and how thorough to be.
 // The rest takes the defaults the first benchmarks settled on; flags change
 // it, and the command printed afterwards shows them.
-func askBench(term *prompt.Terminal, plugins []pluginChoice) (benchConfig, error) {
+func askBench(term *prompt.Terminal, plugins []pluginChoice, model string) (benchConfig, error) {
 	cfg := benchConfig{concurrency: 2, judge: "sonnet", allowTools: []string{"Edit", "Write"}}
 	st := style.On()
 	p := plugins[0]
@@ -184,7 +186,7 @@ func askBench(term *prompt.Terminal, plugins []pluginChoice) (benchConfig, error
 		total := len(cases) * runs
 		return fmt.Sprintf("%s per case · %s · about %s", count(runs, "run"), count(total, "run"), estimate(total, cfg.concurrency))
 	}
-	term.Say("  %s", st.Dim("Claude runs on your Claude Code plan, with your model. Other settings: groma bench -h"))
+	term.Say("  %s", st.Dim("Claude runs on your Claude Code plan with "+model+". Other settings: groma bench -h"))
 	i, err := term.Select("Run", []prompt.Option{
 		{Label: "Standard", Hint: depth(3)},
 		{Label: "Quick look", Hint: depth(1)},

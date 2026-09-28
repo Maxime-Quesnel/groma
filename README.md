@@ -63,7 +63,7 @@ groma exits with 0 when it finds nothing, 1 when it has findings and 2 on error,
 
 `groma bench` measures, for each agent of a plugin, how precisely Claude routes work to it and how well the agent then does the work. Its ground truth is the plugin's own `claude plugin eval` suite: the cases that require or forbid an agent.
 
-Run it with no argument from a plugin or marketplace directory. It asks for the agents to score (space to check, `a` for all), the plugin first when there are several, and how thorough to be: standard, a quick look, precise, or only the plan. Everything else takes sensible defaults: two runs at once, your Claude Code model, Sonnet as the judge.
+Run it with no argument from a plugin or marketplace directory. It asks for the agents to score (space to check, `a` for all), the plugin first when there are several, and how thorough to be: standard, a quick look, precise, or only the plan. Everything else takes sensible defaults: two runs at once, Sonnet as the judge, and the model you picked with `/model` in Claude Code. Eval runs start from a blank Claude Code config, so groma reads that choice, from `ANTHROPIC_MODEL` or your settings as Claude Code does, and passes it on; `--model` overrides it.
 
 ```sh
 groma bench
