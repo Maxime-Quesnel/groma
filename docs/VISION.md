@@ -63,11 +63,12 @@ What was set aside is kept, not deleted: `scan` and `bench` on the branch `scan-
 - `groma check`: 77 rules over plugins, skills, agents, commands and hooks.
 - `groma fix`, safe and `--unsafe`, with diff and confirmation.
 - `.groma.yml` and `groma:disable` comments.
+- v0.1.0: static binaries for Linux and macOS, with checksums and build provenance.
 
 **Next**
 
 1. Machine-readable output, JSON then SARIF, and a GitHub Action, so findings show on pull requests.
-2. Published binaries with checksums, and a Homebrew tap.
+2. A Homebrew tap, now that releases publish static binaries with checksums and provenance.
 3. More of what plugins ship: the hooks of skills' and agents' frontmatter, `.mcp.json` servers, the permissions of settings files.
 4. `groma check` with no path, for everything Claude Code loads on the machine.
 5. A scheduled job that compares groma's list of Claude Code fields, tools and events with the documentation, so the rules follow each release.

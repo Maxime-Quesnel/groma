@@ -75,3 +75,13 @@ func TestCheckSilencesWhatTheConfigurationTurnsOff(t *testing.T) {
 		t.Errorf("got:\n%s%s", out, stderr.String())
 	}
 }
+
+func TestVersion(t *testing.T) {
+	var stdout, stderr strings.Builder
+
+	code := run([]string{"--version"}, nil, &stdout, &stderr)
+
+	if code != 0 || stdout.String() != "groma dev\n" {
+		t.Errorf("exit %d: %q", code, stdout.String())
+	}
+}
