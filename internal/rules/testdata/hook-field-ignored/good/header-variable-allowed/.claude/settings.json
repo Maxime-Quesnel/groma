@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8080/audit",
+            "headers": {
+              "Authorization": "Bearer ${AUDIT_TOKEN}"
+            },
+            "allowedEnvVars": [
+              "AUDIT_TOKEN"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "audit.js"
+            ],
+            "async": true,
+            "statusMessage": "Auditing"
+          }
+        ]
+      }
+    ]
+  }
+}

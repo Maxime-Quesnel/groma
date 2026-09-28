@@ -1,0 +1,6 @@
+{
+  "name": "formatter",
+  "hooks": [
+    "./config/extra-hooks.json"
+  ]
+}

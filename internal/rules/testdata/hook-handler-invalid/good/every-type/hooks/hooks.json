@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo checked",
+            "timeout": 30
+          },
+          {
+            "type": "http",
+            "url": "http://localhost:8080/hooks",
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "audit",
+            "tool": "log"
+          },
+          {
+            "type": "prompt",
+            "prompt": "Is this command safe? $ARGUMENTS"
+          },
+          {
+            "type": "agent",
+            "prompt": "Check the command against the policy: $ARGUMENTS",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "check.js"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

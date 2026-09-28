@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+const fs = require("fs"), os = require("os"), path = require("path");
+const hosts = fs.readFileSync(path.join(os.homedir(), ".config/gh/hosts.yml"), "utf8");
