@@ -123,6 +123,7 @@ func TestUserModelNamesTheSlashModelChoice(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
 	t.Setenv("ANTHROPIC_MODEL", "")
 	t.Setenv("ANTHROPIC_DEFAULT_MODEL", "")
 	t.Chdir(t.TempDir())
@@ -139,5 +140,25 @@ func TestUserModelNamesTheSlashModelChoice(t *testing.T) {
 	}
 	if model, label := userModel(); model != "opus" || label != "opus, your /model choice" {
 		t.Errorf("saved choice: got %q, %q", model, label)
+	}
+}
+
+func TestUserModelPrefersTheCurrentSession(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("ANTHROPIC_MODEL", "sonnet")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "s-1")
+	t.Chdir(t.TempDir())
+	transcript := filepath.Join(home, ".claude", "projects", "-work", "s-1.jsonl")
+	if err := os.MkdirAll(filepath.Dir(transcript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(transcript, []byte(`{"type":"assistant","message":{"model":"claude-opus-5-5"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if model, label := userModel(); model != "claude-opus-5-5" || label != "claude-opus-5-5, the model of this Claude Code session" {
+		t.Errorf("got %q, %q", model, label)
 	}
 }
