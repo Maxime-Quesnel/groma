@@ -27,14 +27,33 @@ Unlike scan, bench runs Claude: through your Claude Code login, so it counts
 against your plan's usage, with the model you chose in Claude Code unless
 --model sets another. The installed plugin is never modified.
 
+Run groma bench with no argument in a terminal to choose everything from lists.
+
 Flags:
 `
 
+// benchConfig is one benchmark to run, from flags or from the prompts.
+type benchConfig struct {
+	pluginDir, extraCases string
+	// agents are names with or without the plugin prefix; empty means all.
+	agents            []string
+	runs, concurrency int
+	model, judge      string
+	maxCost           float64
+	scaffold          bool
+	allowTools        []string
+	dryRun            bool
+	from              string
+}
+
 func runBench(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 && interactive() {
+		return runBenchPrompts(stdout, stderr)
+	}
 	flags := flag.NewFlagSet("bench", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.Usage = func() { fmt.Fprint(stderr, benchUsage); flags.PrintDefaults() }
-	agent := flags.String("agent", "", "score only this agent, running only the cases that expect or forbid it")
+	agents := flags.String("agent", "", "score only these agents, comma-separated, running only the cases that expect or forbid them")
 	cases := flags.String("cases", "", "an extra directory of eval cases, next to the plugin's own")
 	runs := flags.Int("runs", 5, "runs per case")
 	model := flags.String("model", "", "model under test; defaults to the one set in Claude Code. Set it to compare results over time")
@@ -61,54 +80,87 @@ func runBench(args []string, stdout, stderr io.Writer) int {
 		flags.Usage()
 		return 2
 	}
-	pluginDir := args[0]
+	return executeBench(benchConfig{
+		pluginDir: args[0], extraCases: *cases, agents: split(*agents),
+		runs: *runs, concurrency: *concurrency, model: *model, judge: *judge, maxCost: *maxCost,
+		scaffold: *scaffold, allowTools: split(*allowTools), dryRun: *dryRun, from: *from,
+	}, stdout, stderr)
+}
 
-	caseDirs := []string{filepath.Join(pluginDir, "evals")}
-	if *cases != "" {
-		caseDirs = append(caseDirs, *cases)
+func split(list string) []string {
+	var items []string
+	for _, item := range strings.Split(list, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
 	}
-	suite, err := bench.Load(pluginDir, caseDirs...)
+	return items
+}
+
+func loadSuite(pluginDir, extraCases string) (bench.Suite, error) {
+	caseDirs := []string{filepath.Join(pluginDir, "evals")}
+	if extraCases != "" {
+		caseDirs = append(caseDirs, extraCases)
+	}
+	return bench.Load(pluginDir, caseDirs...)
+}
+
+// selection returns the agents to score and the cases to run: every agent
+// and case, or the named agents and the cases that expect or forbid one.
+func selection(s bench.Suite, names []string) (agents []string, cases []bench.Case, err error) {
+	if len(names) == 0 {
+		return s.Agents, s.Cases, nil
+	}
+	for _, name := range names {
+		if !strings.Contains(name, ":") {
+			name = s.Plugin + ":" + name
+		}
+		if !slices.Contains(s.Agents, name) {
+			return nil, nil, fmt.Errorf("%s has no agent %s", s.Plugin, name)
+		}
+		agents = append(agents, name)
+	}
+	for _, c := range s.Cases {
+		if slices.ContainsFunc(agents, func(a string) bool { return slices.Contains(c.Expect, a) || slices.Contains(c.Avoid, a) }) {
+			cases = append(cases, c)
+		}
+	}
+	return agents, cases, nil
+}
+
+func executeBench(cfg benchConfig, stdout, stderr io.Writer) int {
+	suite, err := loadSuite(cfg.pluginDir, cfg.extraCases)
 	if err != nil {
 		fmt.Fprintf(stderr, "groma: %v\n", err)
 		return 2
 	}
-	agents, selected := suite.Agents, suite.Cases
-	if *agent != "" {
-		name := *agent
-		if !strings.Contains(name, ":") {
-			name = suite.Plugin + ":" + name
-		}
-		if !slices.Contains(suite.Agents, name) {
-			fmt.Fprintf(stderr, "groma: %s has no agent %s\n", suite.Plugin, name)
-			return 2
-		}
-		agents, selected = []string{name}, suite.About(name)
+	agents, selected, err := selection(suite, cfg.agents)
+	if err != nil {
+		fmt.Fprintf(stderr, "groma: %v\n", err)
+		return 2
 	}
-
-	if *from != "" {
-		return scoreResult(*from, "", *judge, suite, agents, stdout, stderr)
+	if cfg.from != "" {
+		return scoreResult(cfg.from, "", cfg.judge, suite, agents, stdout, stderr)
 	}
-	printPlan(stdout, suite, agents, selected, *runs)
-	if *dryRun {
+	printPlan(stdout, suite, agents, selected, cfg.runs)
+	if cfg.dryRun {
 		return 0
 	}
 	work := filepath.Join("groma-bench", suite.Plugin+"-"+time.Now().Format("20060102-150405"))
-	copyDir, err := bench.Prepare(suite, pluginDir, work, selected)
+	copyDir, err := bench.Prepare(suite, cfg.pluginDir, work, selected)
 	if err != nil {
 		fmt.Fprintf(stderr, "groma: %v\n", err)
 		return 2
 	}
 	resultPath, _ := filepath.Abs(filepath.Join(work, "result.json"))
-	fmt.Fprintf(stdout, "Running with %s, through your Claude Code plan. Workspace: %s\n\n", cmp.Or(*model, "your Claude Code default model"), work)
-	o := bench.Options{Runs: *runs, Model: *model, JudgeModel: *judge, MaxCostUSD: *maxCost, Concurrency: *concurrency, Scaffold: *scaffold}
-	if *allowTools != "" {
-		o.AllowTools = strings.Split(*allowTools, ",")
-	}
+	fmt.Fprintf(stdout, "Running with %s, through your Claude Code plan. Workspace: %s\n\n", cmp.Or(cfg.model, "your Claude Code default model"), work)
+	o := bench.Options{Runs: cfg.runs, Model: cfg.model, JudgeModel: cfg.judge, MaxCostUSD: cfg.maxCost,
+		Concurrency: cfg.concurrency, Scaffold: cfg.scaffold, AllowTools: cfg.allowTools}
 	if err := bench.Eval(context.Background(), copyDir, resultPath, o, stdout, stderr); err != nil {
 		fmt.Fprintf(stderr, "groma: claude plugin eval: %v\n", err)
 		return 2
 	}
-	return scoreResult(resultPath, filepath.Join(work, "report.txt"), *judge, suite, agents, stdout, stderr)
+	return scoreResult(resultPath, filepath.Join(work, "report.txt"), cfg.judge, suite, agents, stdout, stderr)
 }
 
 // scoreResult reports on a claude plugin eval result, and saves the report

@@ -59,6 +59,24 @@ groma scan ./my-plugin
 
 groma exits with 0 when it finds nothing, 1 when it has findings and 2 on error, so a CI job can fail on findings. It only reads: it never modifies a file, never runs the code it inspects, and sends nothing over the network.
 
+## Benchmark a plugin's agents
+
+`groma bench` measures, for each agent of a plugin, how precisely Claude routes work to it and how well the agent then does the work. Its ground truth is the plugin's own `claude plugin eval` suite: the cases that require or forbid an agent.
+
+Run it with no argument from a plugin or marketplace directory, and choose everything from lists: the plugin, the agents to score (space to check, `a` for all), runs per case, runs at once, the model, and options.
+
+```sh
+groma bench
+```
+
+It then prints the equivalent command, to run the same benchmark again or in CI:
+
+```sh
+groma bench --agent rails-expert --runs 3 --concurrency 2 --judge-model sonnet --scaffold --allow-tools Edit,Write plugins/my-plugin
+```
+
+The report gives each agent's precision and recall with 95% intervals, what Claude did instead when it missed, and the share of the work checks passed, split between exact checks and a judge model's verdicts. Unlike `scan`, `bench` runs Claude: through your own Claude Code login, with your model unless you pick another, so it counts against your plan. It works on a copy of the plugin in `./groma-bench/` and never publishes the report.
+
 ## What it checks
 
 | Rule | Severity | Flags |
