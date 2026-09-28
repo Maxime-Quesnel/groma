@@ -16,11 +16,15 @@ Problem, audience, positioning and roadmap: [docs/VISION.md](docs/VISION.md).
 
 `groma check <path>` takes a plugin, a marketplace, a `.claude` directory or a single file. It finds components where Claude Code looks for them: `.claude-plugin/plugin.json` is a plugin, checked as a whole, `SKILL.md` a skill, a Markdown file with a header under `agents/` an agent, one under `commands/` a command, and `hooks/hooks.json`, a manifest's `hooks` or a settings file's `hooks` are hooks. A file found elsewhere is read by its content. It exits with 0 when there is no red flag, 1 when there is one, 2 on error.
 
+`groma fix [--unsafe] <path>` corrects what the rules can correct on their own, like RuboCop's autocorrect: it shows the diff, asks, and writes only on a yes, never without a terminal to ask in. Safe fixes change nothing where the component works today; `--unsafe` adds the ones that change what runs, when, or with which tools.
+
+`.groma.yml`, in the checked directory or above, turns rules off everywhere (`disable`), for paths (`exclude`), or per rule (`<rule-id>: [globs]`); a `# groma:disable <rule>` comment in a component's frontmatter turns rules off for that component.
+
 Set aside, not merged: `groma scan` and `groma bench` live on the branch `scan-and-bench`, and a first `groma expose` slice on `expose-agent-port-public`.
 
 ## Principles (non-negotiable)
 
-- **Read-only.** `check` never modifies a file and never runs the code it inspects.
+- **Read-only by default.** `check` never modifies a file and never runs the code it inspects. Only `fix` writes, after showing the diff and getting an explicit yes.
 - **Nothing leaves the machine.** No telemetry, no update check, no network call.
 - **Secrets are always masked.** A secret groma quotes never appears in clear in a report, a log, an error message or a test assertion output.
 - **Grounded in the documentation.** Every rule cites its source: the Claude Code documentation or Anthropic guidance it enforces, or the risk it guards against. What Claude Code accepts (fields, tools, events, values) lives in one place, `internal/claudecode`, so a Claude Code release means one file to update.
@@ -51,6 +55,8 @@ Layout:
 cmd/groma/             CLI entry point
 internal/claudecode/   what Claude Code accepts: fields, tools, hook events, values, doc links
 internal/component/    finds plugins, skills, agents, commands and hooks in a tree, and reads them
+internal/config/       .groma.yml: rules turned off, everywhere or for some paths
+internal/fix/          applies edits to file text in place, and shows them as a unified diff
 internal/frontmatter/  the YAML header of Markdown files, with line numbers and parse problems
 internal/rule/         rule metadata, Level, Finding
 internal/rules/        one file per rule, the All registry, testdata/<rule-id>/{bad,good}/

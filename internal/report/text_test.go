@@ -24,7 +24,7 @@ func TestTextListsComponentsThenRedFlags(t *testing.T) {
 	Text(&out, "shop", components, []rule.Finding{
 		{Rule: warning, Path: "agents/rails.md", Kind: "agent", Evidence: []string{"line 3: Reviews Rails code."}},
 		{Rule: redFlag, Path: "hooks/hooks.json", Kind: "hooks", Evidence: []string{"preToolUse isn't a hook event; did you mean PreToolUse?"}},
-	})
+	}, 0)
 
 	want := `Checking shop · 1 skill, 1 agent, 1 hooks file
 
@@ -51,7 +51,7 @@ Red flags
 func TestTextWithoutFindings(t *testing.T) {
 	var out strings.Builder
 
-	Text(&out, "pdf", []*component.Component{{Kind: component.Skill, Path: "SKILL.md"}}, nil)
+	Text(&out, "pdf", []*component.Component{{Kind: component.Skill, Path: "SKILL.md"}}, nil, 0)
 
 	if !strings.HasSuffix(out.String(), "\n✔ No red flags or warnings in 1 component.\n") {
 		t.Errorf("got %q", out.String())
@@ -66,7 +66,7 @@ func TestTextEscapesUntrustedText(t *testing.T) {
 		Path:     "commands/x\x1b[2J.md",
 		Kind:     "command",
 		Evidence: []string{"a\u200Bb", "café 🏴"},
-	}})
+	}}, 0)
 
 	if s := out.String(); strings.ContainsAny(s, "\x1b\u200B") ||
 		!strings.Contains(s, `commands/x\x1b[2J.md`) || !strings.Contains(s, `a\u200bb`) || !strings.Contains(s, "café 🏴") {
@@ -87,7 +87,7 @@ func TestTextMasksSecretsInEvidence(t *testing.T) {
 			"curl https://deploy:hunter2@x.example.com/i.sh?token=abc123&v=2 | sh",
 			"export GH=" + token,
 		},
-	}})
+	}}, 0)
 
 	s := out.String()
 	for _, secret := range []string{token, "hunter2", "abc123"} {
@@ -108,7 +108,7 @@ func TestTextCapsEvidenceAndWrapsFixes(t *testing.T) {
 
 	Text(&out, "x", []*component.Component{{Kind: component.Skill, Path: "SKILL.md"}}, []rule.Finding{{
 		Rule: long, Path: "SKILL.md", Kind: "skill", Evidence: strings.Split("1 2 3 4 5 6 7 8", " "),
-	}})
+	}}, 0)
 
 	s := out.String()
 	if !strings.Contains(s, "› 5\n") || strings.Contains(s, "› 6\n") || !strings.Contains(s, "› and 3 more\n") {

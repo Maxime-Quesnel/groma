@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -96,6 +97,25 @@ func (c *Component) Name() string {
 	}
 	return strings.TrimSuffix(path.Base(c.Path), path.Ext(c.Path))
 }
+
+// Disabled returns the rules a Markdown component turns off for itself, with
+// a comment such as "# groma:disable rule-a, rule-b" in its frontmatter,
+// which Claude never reads, or <!-- groma:disable rule-a --> in its body.
+func (c *Component) Disabled() []string {
+	if c.Kind == Hooks || c.Kind == Plugin {
+		return nil
+	}
+	var rules []string
+	for _, m := range disableComment.FindAllStringSubmatch(string(c.Content), -1) {
+		list := strings.TrimSuffix(strings.TrimSpace(m[1]), "--")
+		for _, id := range strings.FieldsFunc(list, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' }) {
+			rules = append(rules, id)
+		}
+	}
+	return rules
+}
+
+var disableComment = regexp.MustCompile(`(?m)(?:^\s*#|<!--)\s*groma:disable\s+([a-z0-9][a-z0-9, \t-]*)`)
 
 // DirName is the name of the component's directory on disk, even when the
 // tree starts inside it.

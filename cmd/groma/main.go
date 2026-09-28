@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/config"
 	"github.com/Maxime-Quesnel/groma/internal/report"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
 	"github.com/Maxime-Quesnel/groma/internal/rules"
@@ -23,14 +24,18 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, st.Bold("Usage"))
 	command("groma check <path>", "check a skill, agent, command or hooks file, or every one")
 	command("", "in a directory, such as a plugin or a marketplace")
-	fmt.Fprintf(w, "\n%s  0 no red flags %s 1 red flags %s 2 error\n", st.Bold("Exit status"), st.Dim("·"), st.Dim("·"))
+	command("groma fix <path>", "correct what can be corrected without changing what runs;")
+	command("", "shows the diff and asks before writing")
+	command("  --unsafe", "also fixes what changes what runs, when, or with which tools")
+	fmt.Fprintf(w, "\n%s  turn rules off in %s or with a %s comment\n", st.Bold("Config"), st.Cyan(".groma.yml"), st.Cyan("# groma:disable <rule>"))
+	fmt.Fprintf(w, "%s  0 no red flags %s 1 red flags %s 2 error\n", st.Bold("Exit status"), st.Dim("·"), st.Dim("·"))
 }
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		printUsage(stderr)
 		return 2
@@ -38,6 +43,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "check":
 		return runCheck(args[1:], stdout, stderr)
+	case "fix":
+		return runFix(args[1:], stdin, stdout, stderr)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return 0
@@ -58,8 +65,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "groma: %v\n", err)
 		return 2
 	}
-	findings := rules.Check(tree)
-	report.Text(stdout, shortenHome(args[0]), tree.Targets, findings)
+	cfg, err := config.Find(args[0], rules.IDs())
+	if err != nil {
+		fmt.Fprintf(stderr, "groma: %v\n", err)
+		return 2
+	}
+	findings, silenced := rules.Check(tree, cfg)
+	report.Text(stdout, shortenHome(args[0]), tree.Targets, findings, silenced)
 	for _, f := range findings {
 		if f.Rule.Level == rule.RedFlag {
 			return 1

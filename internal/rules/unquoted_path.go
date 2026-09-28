@@ -6,7 +6,9 @@ import (
 
 	"github.com/Maxime-Quesnel/groma/internal/claudecode"
 	"github.com/Maxime-Quesnel/groma/internal/component"
+	"github.com/Maxime-Quesnel/groma/internal/fix"
 	"github.com/Maxime-Quesnel/groma/internal/rule"
+	"strings"
 )
 
 var unquotedPath = Rule{
@@ -35,6 +37,7 @@ var unquotedPath = Rule{
 		}
 		return evidence
 	},
+	Fix: fixUnquotedPaths,
 }
 
 var directoryVariable = regexp.MustCompile(`\$\{?CLAUDE_(?:PLUGIN_ROOT|PROJECT_DIR|SKILL_DIR|PLUGIN_DATA)\}?`)
@@ -63,4 +66,68 @@ func unquotedVariable(command string) string {
 		}
 	}
 	return ""
+}
+
+// fixUnquotedPaths wraps each unquoted path built on a directory variable
+// in double quotes. Where the path has no spaces, the command runs the same.
+func fixUnquotedPaths(c *component.Component, t *component.Tree, unsafe bool) []fix.Edit {
+	var edits []fix.Edit
+	for _, h := range c.Hooks.Handlers {
+		if h.Exec || h.Type != "command" && h.Type != "" {
+			continue
+		}
+		if quoted, ok := quoteVariables(h.Command); ok {
+			edits = append(edits, jsonValueEdits(c, "command", jsonString(h.Command), jsonString(quoted))...)
+		}
+	}
+	for _, s := range c.InlineShell() {
+		for i, line := range strings.Split(s.Command, "\n") {
+			if quoted, ok := quoteVariables(line); ok {
+				if e, found := replaceInLine(c, s.Line+i, line, quoted); found {
+					edits = append(edits, e)
+				}
+			}
+		}
+	}
+	return edits
+}
+
+// quoteVariables wraps each word of command that holds an unquoted
+// directory variable in double quotes. It leaves the command alone when such
+// a word has globs, quotes or substitutions, which quoting would change.
+func quoteVariables(command string) (string, bool) {
+	if unquotedVariable(command) == "" {
+		return command, false
+	}
+	quoted := make([]bool, len(command))
+	inDouble, inSingle := false, false
+	for i := 0; i < len(command); i++ {
+		switch c := command[i]; {
+		case c == '\\' && !inSingle:
+			i++
+			continue
+		case c == '"' && !inSingle:
+			inDouble = !inDouble
+		case c == '\'' && !inDouble:
+			inSingle = !inSingle
+		}
+		quoted[i] = inDouble || inSingle
+	}
+	matches := directoryVariable.FindAllStringIndex(command, -1)
+	out := command
+	for i := len(matches) - 1; i >= 0; i-- {
+		m := matches[i]
+		if quoted[m[0]] {
+			continue
+		}
+		start := strings.LastIndexAny(command[:m[0]], " \t;&|(=") + 1
+		end := m[1] + strings.IndexAny(command[m[1]:]+" ", " \t;&|)")
+		word := command[start:end]
+		rest := strings.Replace(word, command[m[0]:m[1]], "", 1)
+		if strings.ContainsAny(rest, "*?[]\"'`$") {
+			return command, false
+		}
+		out = out[:start] + `"` + word + `"` + out[end:]
+	}
+	return out, out != command
 }

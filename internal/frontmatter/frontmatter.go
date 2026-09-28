@@ -25,8 +25,10 @@ type Header struct {
 }
 
 type Field struct {
-	Key  string
-	Line int
+	Key string
+	// Line is where the field starts in the file, and EndLine the last
+	// line its value runs to.
+	Line, EndLine int
 	// Value is a scalar with its quotes removed and its lines joined.
 	Value string
 	// List holds the items of a flow ([a, b]) or block (- a) list.
@@ -88,7 +90,7 @@ func Parse(content []byte) Header {
 	h.Found = true
 	for i := 1; i < len(lines); i++ {
 		if delimiter(lines[i]) {
-			h.parse(lines[1:i])
+			h.parse(lines[1:i], 2)
 			h.Body = strings.Join(lines[i+1:], "\n")
 			h.BodyLine = i + 2
 			return h
@@ -108,9 +110,20 @@ var (
 	nestedKey      = regexp.MustCompile(`^[A-Za-z0-9_"'][^:]*:(?:[ \t]|$)`)
 )
 
-// parse reads the header's lines, the first of which is line 2 of the file.
-func (h *Header) parse(lines []string) {
-	lineOf := func(i int) int { return i + 2 }
+// ParseDocument reads a whole file as YAML, as a configuration file is, with
+// the same subset and checks as a Markdown header.
+func ParseDocument(content []byte) Header {
+	text := strings.TrimPrefix(strings.ReplaceAll(string(content), "\r\n", "\n"), string(rune(0xFEFF)))
+	var h Header
+	h.Found = true
+	h.parse(strings.Split(text, "\n"), 1)
+	return h
+}
+
+// parse reads the header's lines, the first of which is line first of the
+// file.
+func (h *Header) parse(lines []string, first int) {
+	lineOf := func(i int) int { return i + first }
 	for i := 0; i < len(lines); {
 		line := lines[i]
 		if trimmed := strings.TrimSpace(line); trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -159,6 +172,7 @@ func (h *Header) parse(lines []string) {
 				h.problem(lineOf(i+1+j), "a tab indents this line; YAML only allows spaces")
 			}
 		}
+		f.EndLine = f.Line + len(nested)
 		h.value(&f, value, nested)
 		h.Fields = append(h.Fields, f)
 		i = end
