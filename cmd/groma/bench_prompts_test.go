@@ -50,26 +50,27 @@ func TestAskBenchAsksOnlyForAgentsAndDepth(t *testing.T) {
 	keys := strings.Join([]string{
 		"\r",             // no agent checked: asked again
 		" \r",            // rails
+		"\x1b[B\x1b[B\r", // sonnet, past the detected model and opus
 		"\x1b[B\x1b[B\r", // precise
 	}, "")
 	var out strings.Builder
 
-	cfg, err := askBench(prompt.New(strings.NewReader(keys), &out), plugins, "opus, your /model choice")
+	cfg, err := askBench(prompt.New(strings.NewReader(keys), &out), plugins, "claude-opus-5-5", "claude-opus-5-5, the model of this Claude Code session")
 
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.pluginDir != plugins[0].dir || !slices.Equal(cfg.agents, []string{"rails"}) || cfg.runs != 5 || cfg.concurrency != 2 ||
-		cfg.model != "" || cfg.judge != "sonnet" || !cfg.scaffold || !slices.Equal(cfg.allowTools, []string{"Edit", "Write"}) || cfg.dryRun {
+		cfg.model != "sonnet" || cfg.judge != "sonnet" || !cfg.scaffold || !slices.Equal(cfg.allowTools, []string{"Edit", "Write"}) || cfg.dryRun {
 		t.Errorf("got %+v", cfg)
 	}
 	plain := ansi.ReplaceAllString(out.String(), "")
-	for _, want := range []string{"✔ Plugin  shop 1.2.0", "Check at least one agent", "with opus, your /model choice.", "5 runs per case · 5 runs", "✔ Run  Precise"} {
+	for _, want := range []string{"✔ Plugin  shop 1.2.0", "Check at least one agent", "❯ claude-opus-5-5  the model of this Claude Code session", "✔ Model  sonnet", "5 runs per case · 5 runs", "✔ Run  Precise"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("output lacks %q:\n%s", want, plain)
 		}
 	}
-	if got := commandLine(cfg, root, t.TempDir()); got != "groma bench --agent rails --runs 5 --concurrency 2 --judge-model sonnet --scaffold --allow-tools Edit,Write plugins/shop" {
+	if got := commandLine(cfg, root, t.TempDir()); got != "groma bench --agent rails --runs 5 --concurrency 2 --model sonnet --judge-model sonnet --scaffold --allow-tools Edit,Write plugins/shop" {
 		t.Errorf("command line %q", got)
 	}
 }
@@ -78,12 +79,12 @@ func TestAskBenchShowsThePlanOrCancels(t *testing.T) {
 	root := testMarketplace(t)
 	plugins := findPlugins(root, filepath.Join(t.TempDir(), "no-config"), t.TempDir())
 
-	cfg, err := askBench(prompt.New(strings.NewReader(" \r\x1b[A\x1b[A\r"), &strings.Builder{}), plugins, "opus")
-	if err != nil || !cfg.dryRun || cfg.runs != 3 {
+	cfg, err := askBench(prompt.New(strings.NewReader(" \r\r\x1b[A\x1b[A\r"), &strings.Builder{}), plugins, "claude-opus-5-5", "claude-opus-5-5, the model of this Claude Code session")
+	if err != nil || !cfg.dryRun || cfg.runs != 3 || cfg.model != "claude-opus-5-5" {
 		t.Errorf("plan only: got %+v, %v", cfg, err)
 	}
 
-	_, err = askBench(prompt.New(strings.NewReader(" \r\x1b[A\r"), &strings.Builder{}), plugins, "opus")
+	_, err = askBench(prompt.New(strings.NewReader(" \r\r\x1b[A\r"), &strings.Builder{}), plugins, "", "Claude Code's default model, since no /model choice is saved")
 	if !errors.Is(err, prompt.ErrCanceled) {
 		t.Errorf("cancel: got %v", err)
 	}
@@ -160,5 +161,17 @@ func TestUserModelPrefersTheCurrentSession(t *testing.T) {
 
 	if model, label := userModel(); model != "claude-opus-5-5" || label != "claude-opus-5-5, the model of this Claude Code session" {
 		t.Errorf("got %q, %q", model, label)
+	}
+}
+
+func TestModelChoicesPutTheDetectedModelFirst(t *testing.T) {
+	models, options := modelChoices("opus", "opus, your /model choice")
+	if !slices.Equal(models, []string{"opus", "sonnet", "fable", "haiku"}) || options[0].Hint != "your /model choice" {
+		t.Errorf("got %v %+v", models, options)
+	}
+
+	models, options = modelChoices("", "Claude Code's default model, since no /model choice is saved")
+	if models[0] != "" || options[0].Label != "default" || len(models) != 5 {
+		t.Errorf("got %v %+v", models, options)
 	}
 }
